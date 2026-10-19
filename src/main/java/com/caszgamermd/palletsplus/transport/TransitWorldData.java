@@ -39,7 +39,12 @@ public final class TransitWorldData extends SavedData {
     public void record(TransportVehicle v){
         JsonObject o=new JsonObject();o.addProperty("id",v.getStringUUID());o.addProperty("kind",v.kind());
         o.addProperty("x",v.getX());o.addProperty("y",v.getY());o.addProperty("z",v.getZ());o.addProperty("yaw",v.getYRot());
-        o.addProperty("active",v.flightActive());o.addProperty("tx",v.flightDestination().getX());o.addProperty("tz",v.flightDestination().getZ());
+        // Keep saved drone destination fields compatible with existing worlds.
+        // Ground transports record a short projected heading, not a global route:
+        // tickets follow turns as each loaded vehicle advances.
+        net.minecraft.core.BlockPos target=v.kind()==4?v.flightDestination():
+            v.blockPosition().relative(v.getDirection(),v.kind()==1?96:48);
+        o.addProperty("active",v.transportChunksActive());o.addProperty("tx",target.getX());o.addProperty("tz",target.getZ());
         o.addProperty("status",v.transitStatus());o.addProperty("seen",v.level().getGameTime());
         JsonArray pallets=new JsonArray();for(int i=0;i<v.capacity();i++)if(!v.cargo[i].empty()){JsonObject p=new JsonObject();p.addProperty("slot",i+1);String name=v.cargo[i].deck.getHoverName().getString();p.addProperty("name",name.substring(0,Math.min(80,name.length())));p.addProperty("stacks",v.cargo[i].items.stream().filter(s->!s.isEmpty()).count());pallets.add(p);}
         o.add("pallets",pallets);vehicles.put(v.getStringUUID(),o);setDirty();
