@@ -13,10 +13,10 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor;
+    private TransportVehicle engine,conveyor,extra;
     private final List<TransportVehicle> cars=new ArrayList<>();
-    private boolean conveyorSpeed,holdStop,indexed;
-    private int elapsed;
+    private boolean conveyorSpeed,holdStop,indexed,coupled;
+    private int elapsed,coupledTick;
     public void onInitialize(){
         if(!Boolean.getBoolean("palletsplus.integration"))return;
         ServerLifecycleEvents.SERVER_STARTED.register(server->{try{setup(server);}catch(Throwable ex){fail(server,ex);}});
@@ -45,30 +45,39 @@ public final class TransportChecks implements ModInitializer {
             int kind=i==9?3:2;double length=kind==3?4.4:6.8;
             z+=TransportMotion.spacing(cars.getLast().length(),length);
             var car=vehicle(level,kind,8,(int)Math.round((z-.5)/3)*3,z);
-            String result=car.couple(cars.getLast());
-            if(!result.startsWith("Cars coupled"))throw new AssertionError(result);
             cars.add(car);
         }
         z+=TransportMotion.spacing(cars.getLast().length(),6.8);
-        var extra=vehicle(level,2,8,(int)Math.round((z-.5)/3)*3,z);
-        if(!extra.couple(cars.getLast()).startsWith("Maximum train"))throw new AssertionError("Eleventh car accepted");
-        extra.discard();
+        extra=vehicle(level,2,8,(int)Math.round((z-.5)/3)*3,z);
         conveyor=vehicle(level,0,24,0,.5);
-        engine.toggleEngine();
+        // Defer coupling until the first server tick: addFreshEntity() has queued UUID
+        // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
     private void near(double actual,double expected,String name){if(Math.abs(actual-expected)>.015)throw new AssertionError(name+": expected "+expected+", got "+actual);}
     private void verify(MinecraftServer server){
+        if(!coupled){
+            for(int i=1;i<cars.size();i++){
+                String result=cars.get(i).couple(cars.get(i-1));
+                if(!result.startsWith("Cars coupled"))throw new AssertionError("Car "+i+": "+result);
+            }
+            if(!extra.couple(cars.getLast()).startsWith("Maximum train"))throw new AssertionError("Eleventh car accepted");
+            extra.discard();
+            coupled=true;coupledTick=engine.tickCount;
+            engine.toggleEngine();
+            return;
+        }
         if(++elapsed>800)throw new AssertionError("Simulation did not finish");
+        int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;}
-        if(engine.tickCount==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars");
-        if(engine.tickCount==220){
+        if(moveTicks==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars");
+        if(moveTicks==220){
             near(engine.getZ(),-149.5,"Index rail centre stop");
             if(!engine.indexedAt(new BlockPos(8,64,-150)))throw new AssertionError("Indexer did not capture engine");
             if(!engine.advanceOneCar().startsWith("Indexing"))throw new AssertionError("Index advance rejected");
             indexed=true;
         }
-        if(engine.tickCount==300){
+        if(moveTicks==300){
             near(engine.getZ(),-155.1,"Index advance distance");
             near(cars.get(1).getZ(),-149.5,"First car at unloading marker");
             for(int i=1;i<cars.size();i++)near(cars.get(i).getZ()-cars.get(i-1).getZ(),TransportMotion.spacing(cars.get(i-1).length(),cars.get(i).length()),"Coupler "+i);
