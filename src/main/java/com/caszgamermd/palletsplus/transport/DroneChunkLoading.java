@@ -38,6 +38,21 @@ public final class DroneChunkLoading {
                     int radius=kind==4?2:1;
                     for(var chunk:TransportChunkCorridor.plan(kind,x,z,tx,tz))
                         level.getChunkSource().addTicketWithRadius(ticket,new ChunkPos(chunk.x(),chunk.z()),radius);
+                    // A train can wrap around a curve; ticket actual car chunks,
+                    // not just the engine's straight projected back corridor.
+                    if(kind==1&&record.has("trailers")&&record.get("trailers").isJsonArray()){
+                        int scanned=0;
+                        for(var element:record.getAsJsonArray("trailers")){
+                            if(++scanned>TransportMotion.MAX_CARS)break;
+                            if(!element.isJsonObject())continue;
+                            var car=element.getAsJsonObject();
+                            if(!car.has("x")||!car.has("z"))continue;
+                            double px=car.get("x").getAsDouble(),pz=car.get("z").getAsDouble();
+                            if(!Double.isFinite(px)||!Double.isFinite(pz))continue;
+                            level.getChunkSource().addTicketWithRadius(ticket,
+                                new ChunkPos((int)Math.floor(px)>>4,(int)Math.floor(pz)>>4),1);
+                        }
+                    }
                     String key=level.dimension().identifier()+"/"+entry.getKey();
                     net.minecraft.world.entity.Entity e;
                     try{e=level.getEntity(UUID.fromString(entry.getKey()));}catch(IllegalArgumentException ex){data.forget(entry.getKey());continue;}
