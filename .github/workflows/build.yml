@@ -24,17 +24,18 @@ jobs:
         run: |
           python3 scripts/transport_assets_smoke.py
           python3 scripts/addon_boundary_smoke.py
-      - name: Dedicated server startup with Caszual Additions
+      - name: Dedicated server movement with Caszual Additions
         run: |
-          mkdir -p run
-          echo 'eula=true' > run/eula.txt
+          mkdir -p run-integration
+          echo 'eula=true' > run-integration/eula.txt
+          printf 'level-type=minecraft:flat\npause-when-empty-seconds=-1\nonline-mode=false\n' > run-integration/server.properties
           set +e
-          timeout 150s gradle runServer --args='nogui' > server-smoke.log 2>&1
+          timeout 240s gradle runIntegrationServer --args='nogui' > server-smoke.log 2>&1
           status=$?
           set -e
           cat server-smoke.log
           if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then exit "$status"; fi
-          grep -q 'Done (' server-smoke.log
+          grep -q 'PALLETS_PLUS_MOVEMENT_PASS' server-smoke.log
           if grep -E 'Mixin apply failed|InvalidMixinException|NoClassDefFoundError' server-smoke.log; then exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()

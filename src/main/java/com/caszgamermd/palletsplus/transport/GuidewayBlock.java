@@ -32,6 +32,7 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     public int rise(){return kind.endsWith("_up")?1:kind.endsWith("_down")?-1:0;}
     public Direction exit(Direction entry){return kind.endsWith("_left")?entry.getCounterClockWise():kind.endsWith("_right")?entry.getClockWise():entry;}
     public static boolean complete(Level l,BlockPos p){
+        if(!l.hasChunkAt(p))return false;
         BlockState s=l.getBlockState(p);
         if(!(s.getBlock() instanceof GuidewayBlock)||s.getValue(PART)!=4)return false;
         for(int i=0;i<9;i++){
@@ -59,11 +60,23 @@ public final class GuidewayBlock extends Block implements EntityBlock {
         for(int i=0;i<9;i++)if(l.hasNeighborSignal(cell(r,s.getValue(FACING),i)))return true;return false;
     }
     @Override protected void neighborChanged(BlockState s,Level l,BlockPos p,Block b,net.minecraft.world.level.redstone.Orientation o,boolean moved){
-        if(l.isClientSide()||(!kind.equals("conveyor_hold")&&!kind.equals("conveyor_logic")))return;
-        BlockPos r=root(p,s);boolean power=powered(l,r);
+        if(l.isClientSide()||(!kind.equals("conveyor_hold")&&!kind.equals("conveyor_logic")&&!kind.equals("pallet_rail_index")))return;
+        BlockPos r=root(p,s);if(!complete(l,r))return;
+        boolean wasPowered=l.getBlockState(r).getValue(POWERED),power=powered(l,r);
         for(int i=0;i<9;i++){BlockPos q=cell(r,s.getValue(FACING),i);var a=l.getBlockState(q);if(a.is(this)&&a.getValue(POWERED)!=power)l.setBlock(q,a.setValue(POWERED,power),2);}
+        if(kind.equals("pallet_rail_index")&&power&&!wasPowered&&l instanceof ServerLevel server)advanceIndex(server,r,null);
+    }
+    private static void advanceIndex(ServerLevel level,BlockPos root,net.minecraft.world.entity.player.Player player){
+        String result="Stop an engine on this indexing rail first.";
+        for(var engine:level.getEntitiesOfClass(TransportVehicle.class,new net.minecraft.world.phys.AABB(root).inflate(96)))
+            if(engine.indexedAt(root)){result=engine.advanceOneCar();break;}
+        if(player!=null)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(result));
     }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
+        if(kind.equals("pallet_rail_index")){
+            if(l instanceof ServerLevel server)advanceIndex(server,root(p,s),player);
+            return net.minecraft.world.InteractionResult.SUCCESS;
+        }
         if(!kind.equals("conveyor_logic"))return net.minecraft.world.InteractionResult.PASS;
         if(!l.isClientSide()&&l.getBlockEntity(root(p,s)) instanceof LogicConveyorEntity logic){logic.cycle(player.isShiftKeyDown());player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Logic conveyor: LOW = "+LogicConveyorEntity.label(logic.unpowered)+" / HIGH = "+LogicConveyorEntity.label(logic.powered)+". Click edits LOW; sneak-click edits HIGH."));}
         return net.minecraft.world.InteractionResult.SUCCESS;

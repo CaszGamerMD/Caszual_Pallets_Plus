@@ -17,7 +17,7 @@ def model(name,els,display=None):
  write(f'assets/caszual_additions/models/block/transport/{name}.json',obj)
 def item(name,ref):write(f'assets/caszual_additions/items/{name}.json',{'model':{'type':'minecraft:model','model':'caszual_additions:block/transport/'+ref}})
 DISPLAY={'gui':{'rotation':[25,225,0],'translation':[0,0,0],'scale':[.68,.68,.68]},'ground':{'scale':[.35,.35,.35]},'fixed':{'rotation':[0,90,0],'scale':[.55,.55,.55]},'thirdperson_righthand':{'rotation':[75,45,0],'scale':[.35,.35,.35]},'firstperson_righthand':{'rotation':[0,45,0],'scale':[.45,.45,.45]}}
-names=['conveyor_hold','conveyor_logic','conveyor_straight','conveyor_left','conveyor_right','conveyor_up','conveyor_down','pallet_rail','pallet_rail_left','pallet_rail_right','drone_parking_bay']
+names=['conveyor_hold','conveyor_logic','conveyor_straight','conveyor_left','conveyor_right','conveyor_up','conveyor_down','pallet_rail','pallet_rail_index','pallet_rail_left','pallet_rail_right','drone_parking_bay']
 for name in names:
  variants={};full=[]
  for part in range(9):
@@ -117,6 +117,17 @@ for name in names:
    if part==4:
     # A recessed direction plate with a raised three-dimensional arrow.
     add([5,4+rise*8-1,5],[11,4+rise*8-.25,11],'dark')
+  if name=='pallet_rail_index' and part==4:
+   add([2,1.8,5],[14,2.8,11],'steel')
+   add([3,2.8,6],[13,3.0,10],'dark')
+   for x in (4,7,10):add([x,3.0,6],[x+1.2,3.3,10],'yellow')
+   add([6,3.3,7],[10,3.6,9],'red')
+  if not name.startswith('pallet_rail') and name!='drone_parking_bay' and part==4 and name!='conveyor_logic':
+   y=4+rise*8+.15
+   add([7,y,6],[9,y+.15,11],'yellow')
+   add([5,y,5],[11,y+.15,7],'yellow')
+   add([6,y,4],[10,y+.15,5],'yellow')
+   add([7,y,3],[9,y+.15,4],'yellow')
   if name=='conveyor_hold':
    if row==0:
     for x in ([.3] if col==0 else [13.7] if col==2 else []):
@@ -172,7 +183,16 @@ def vehicle(name,length):
   for x in (-.945,.925):
    for z in [-1.5+i*.15 for i in range(10)]:add(x,.92,z,.02,.45,.06,'rubber')
    add(x,1.44,-1.58,.022,.08,1.66,'yellow')
-  add(-.93,.70,.48,1.86,1.65,1.25,'steel')
+  # Hollow driver cab with a visible seat and dashboard.
+  for x in (-.93,.83):add(x,.70,.48,.10,.70,1.25,'steel')
+  add(-.93,.70,1.63,1.86,1.65,.10,'steel')
+  add(-.83,.70,.48,1.66,.45,.15,'dark')
+  add(-.38,.78,.88,.76,.20,.62,'dark')
+  add(-.35,.98,.91,.70,.12,.56,'seat')
+  add(-.35,1.1,1.4,.70,.55,.09,'seat')
+  add(-.58,1.16,.51,1.16,.10,.20,'edge')
+  add(-.20,1.26,.55,.40,.05,.12,'light')
+  for x in (-.93,.83):add(x,1.4,.48,.10,.95,.10,'edge')
   add(-.79,1.46,.46,1.58,.65,.035,'glass')
   for x in (-.955,.925):add(x,1.44,.68,.03,.66,.78,'glass')
   add(-1.03,2.35,.34,2.06,.17,1.53,'dark')
@@ -197,8 +217,13 @@ def vehicle(name,length):
    for z in (-2.05,-.72,.67,1.96):add(x,1.3,z,.09,1.15,.09,'steel')
    for z in (-1.91,-.59,.80):add(x+.015,1.38,z,.06,.91,1.12,'glass')
   add(-1.12,2.45,-2.2,2.24,.18,4.4,'dark');add(-.91,2.63,-2.05,1.82,.10,4.1,'steel')
-  for z in (-1.45,.75):
-   add(-.82,.72,z,1.64,.22,.58,'dark');add(-.78,.94,z+.03,1.56,.15,.52,'seat');add(-.80,1.09,z+.49,1.60,.63,.09,'seat')
+  # Eight individual seats: two columns, four rows.
+  for z in (-1.5,-.5,.5,1.5):
+   for x in (-.55,.55):
+    add(x-.35,.72,z-.30,.70,.22,.60,'dark')
+    add(x-.33,.94,z-.28,.66,.15,.56,'seat')
+    add(x-.34,1.09,z+.24,.68,.63,.08,'seat')
+    for a in (-.38,.32):add(x+a,1.06,z-.18,.06,.18,.42,'edge')
   for z in (-2.2,2.12):
    add(-.86,.72,z,.33,.75,.08,'steel');add(.53,.72,z,.33,.75,.08,'steel')
   for x in (-.42,.36):add(x,.72,-2.17,.06,1.65,.06,'edge')
@@ -223,6 +248,9 @@ def vehicle(name,length):
 for name,length in [('pallet_engine',3.6),('pallet_car',6.8),('passenger_car',4.4),('pallet_drone',3.3)]:vehicle(name,length)
 els=[cube([5,0,6],[11,12,10],'steel'),cube([5.5,5,5.7],[10.5,11.5,6],'dark'),cube([6,7,5.5],[10,11,5.7],'light'),cube([6,2,5.7],[7,3,6],'yellow'),cube([9,2,5.7],[10,3,6],'red'),cube([6,12,7],[7,16,8],'edge')]
 model('transport_controller',els,DISPLAY);item('transport_controller','transport_controller')
+# Offset ratchet crank, steel socket and yellow rubber grip.
+crank=[cube([6,1,6],[10,4,10],'edge'),cube([6.6,4,6.6],[9.4,9,9.4],'steel'),cube([8,8,7],[14,10,9],'edge'),cube([12,10,6.5],[14,15,9.5],'rubber'),cube([11.8,10,6.3],[14.2,11,9.7],'yellow'),cube([11.8,14,6.3],[14.2,15,9.7],'yellow')]
+model('conveyor_crank',crank,DISPLAY);item('conveyor_crank','conveyor_crank')
 # Control furniture shares the same steel, hazard stripe and indicator palette.
 station=[cube([2,0,2],[14,2,14]),cube([3,2,3],[13,3,13],'dark'),cube([6,3,6],[10,24,10],'edge'),cube([2,17,5],[14,29,11]),cube([3,18,4.8],[13,28,5],'dark'),cube([4,23,4.6],[12,27,4.8],'red'),cube([4,19,4.6],[12,21,4.8],'yellow'),cube([1.5,28,4.5],[14.5,29.5,11.5],'dark')]
 for x in (3,11):
@@ -246,7 +274,7 @@ for part in range(4):
 write('assets/caszual_additions/blockstates/pallet_pressure_plate.json',{'variants':platevariants})
 item('pallet_pressure_plate','pallet_pressure_plate_0_false')
 langp=AS/'lang/en_us.json';langp.parent.mkdir(parents=True,exist_ok=True);lang={}
-labels={'conveyor_hold':'Pallet Conveyor — Redstone Hold Bar','conveyor_logic':'Pallet Conveyor — Logic Switch','train_station_post':'Train Station Post','pallet_pressure_plate':'Pallet Pressure Plate','pallet_transit_computer':'Pallet Transit Computer','conveyor_straight':'Pallet Conveyor — Straight','conveyor_left':'Pallet Conveyor — Left Turn','conveyor_right':'Pallet Conveyor — Right Turn','conveyor_up':'Pallet Conveyor — Ramp Up','conveyor_down':'Pallet Conveyor — Ramp Down','pallet_rail':'Warehouse Rail — Straight','pallet_rail_left':'Warehouse Rail — Left Turn','pallet_rail_right':'Warehouse Rail — Right Turn','drone_parking_bay':'Drone Parking Bay','pallet_engine':'Pallet Train Engine','pallet_car':'Three-Pallet Flatbed Car','passenger_car':'Passenger Car','pallet_drone':'Pallet Drone','transport_controller':'Pallet Transport Controller'}
+labels={'pallet_rail_index':'Warehouse Rail — Car Indexer','conveyor_crank':'Conveyor Direction Crank','conveyor_hold':'Pallet Conveyor — Redstone Hold Bar','conveyor_logic':'Pallet Conveyor — Logic Switch','train_station_post':'Train Station Post','pallet_pressure_plate':'Pallet Pressure Plate','pallet_transit_computer':'Pallet Transit Computer','conveyor_straight':'Pallet Conveyor — Straight','conveyor_left':'Pallet Conveyor — Left Turn','conveyor_right':'Pallet Conveyor — Right Turn','conveyor_up':'Pallet Conveyor — Ramp Up','conveyor_down':'Pallet Conveyor — Ramp Down','pallet_rail':'Warehouse Rail — Straight','pallet_rail_left':'Warehouse Rail — Left Turn','pallet_rail_right':'Warehouse Rail — Right Turn','drone_parking_bay':'Drone Parking Bay','pallet_engine':'Pallet Train Engine','pallet_car':'Three-Pallet Flatbed Car','passenger_car':'Passenger Car','pallet_drone':'Pallet Drone','transport_controller':'Pallet Transport Controller'}
 for name,label in labels.items():lang[('block.' if name in names+['train_station_post','pallet_pressure_plate','pallet_transit_computer'] else 'item.')+'caszual_additions.'+name]=label
 lang['entity.caszual_additions.pallet_transport']='Pallet Transport';langp.write_text(json.dumps(lang,indent=2,ensure_ascii=False)+'\n')
 tag=ROOT/'data/caszual_additions/tags/item/caszual_content.json';tag.parent.mkdir(parents=True,exist_ok=True);obj={'replace':False,'values':[]}
@@ -256,9 +284,9 @@ for name in labels:
 tag.write_text(json.dumps(obj,indent=2)+'\n')
 # Survival recipes; module kits each place a complete 3x3 footprint.
 for name in labels:
- ingredients={'conveyor_hold':'minecraft:iron_bars','conveyor_logic':'minecraft:repeater','train_station_post':'minecraft:redstone_torch','pallet_pressure_plate':'minecraft:heavy_weighted_pressure_plate','pallet_transit_computer':'minecraft:map','conveyor_straight':'minecraft:hopper','conveyor_left':'minecraft:amethyst_shard','conveyor_right':'minecraft:quartz','conveyor_up':'minecraft:piston','conveyor_down':'minecraft:sticky_piston','pallet_rail':'minecraft:rail','pallet_rail_left':'minecraft:powered_rail','pallet_rail_right':'minecraft:detector_rail','pallet_engine':'minecraft:furnace','pallet_car':'minecraft:chest','passenger_car':'minecraft:oak_stairs','pallet_drone':'minecraft:ender_pearl','drone_parking_bay':'minecraft:lodestone','transport_controller':'minecraft:comparator'}
+ ingredients={'pallet_rail_index':'minecraft:observer','conveyor_crank':'minecraft:lever','conveyor_hold':'minecraft:iron_bars','conveyor_logic':'minecraft:repeater','train_station_post':'minecraft:redstone_torch','pallet_pressure_plate':'minecraft:heavy_weighted_pressure_plate','pallet_transit_computer':'minecraft:map','conveyor_straight':'minecraft:hopper','conveyor_left':'minecraft:amethyst_shard','conveyor_right':'minecraft:quartz','conveyor_up':'minecraft:piston','conveyor_down':'minecraft:sticky_piston','pallet_rail':'minecraft:rail','pallet_rail_left':'minecraft:powered_rail','pallet_rail_right':'minecraft:detector_rail','pallet_engine':'minecraft:furnace','pallet_car':'minecraft:chest','passenger_car':'minecraft:oak_stairs','pallet_drone':'minecraft:ender_pearl','drone_parking_bay':'minecraft:lodestone','transport_controller':'minecraft:comparator'}
  write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':'caszual_additions:'+name,'count':1}})
-print('Generated 11 modular guideways and transit control furniture, 4 vehicle models, controller, recipes and discovery tags.')
+print('Generated 12 modular guideways and transit control furniture, 4 vehicle models, controller, recipes and discovery tags.')
 
 for name in ('train_station_post','pallet_transit_computer'):
  write(f'data/caszual_additions/loot_table/blocks/{name}.json',{'type':'minecraft:block','pools':[{'rolls':1,'entries':[{'type':'minecraft:item','name':'caszual_additions:'+name}],'conditions':[{'condition':'minecraft:survives_explosion'}]}]})

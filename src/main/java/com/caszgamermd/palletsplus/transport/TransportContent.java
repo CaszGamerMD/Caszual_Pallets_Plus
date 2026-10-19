@@ -21,7 +21,7 @@ public final class TransportContent {
     public static Item CONTROLLER;
     public static final String[] VEHICLES={"conveyor_pallet","pallet_engine","pallet_car","passenger_car","pallet_drone"};
     public static void initialize(){
-        for(String name:List.of("conveyor_hold","conveyor_logic","conveyor_straight","conveyor_left","conveyor_right","conveyor_up","conveyor_down","pallet_rail","pallet_rail_left","pallet_rail_right")){
+        for(String name:List.of("conveyor_hold","conveyor_logic","conveyor_straight","conveyor_left","conveyor_right","conveyor_up","conveyor_down","pallet_rail","pallet_rail_index","pallet_rail_left","pallet_rail_right")){
             var key=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId(name));
             var block=new GuidewayBlock(name,BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(4).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().setId(key));
             Registry.register(BuiltInRegistries.BLOCK,key,block); WAYS.put(name,block);
@@ -47,6 +47,8 @@ public final class TransportContent {
         var ck=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("transport_controller"));
         CONTROLLER=Registry.register(BuiltInRegistries.ITEM,ck,new TransportController(new Item.Properties().stacksTo(1).setId(ck)));
         ITEMS.put("transport_controller",CONTROLLER);
+        var crankKey=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("conveyor_crank"));
+        ITEMS.put("conveyor_crank",Registry.register(BuiltInRegistries.ITEM,crankKey,new ConveyorCrank(new Item.Properties().stacksTo(1).setId(crankKey))));
         var ek=ResourceKey.create(Registries.ENTITY_TYPE,PalletsPlus.legacyId("pallet_transport"));
         VEHICLE=Registry.register(BuiltInRegistries.ENTITY_TYPE,ek,EntityType.Builder.<TransportVehicle>of(TransportVehicle::new,MobCategory.MISC).sized(2.4f,2.5f).build(ek));
         FabricDefaultAttributeRegistry.register(VEHICLE,TransportVehicle.attributes());

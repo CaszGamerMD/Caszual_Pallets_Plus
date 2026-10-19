@@ -28,6 +28,9 @@ public final class TransportController extends Item {
     }
     public static InteractionResult useVehicle(Player player,InteractionHand hand,TransportVehicle v){
         if(!(v.level() instanceof ServerLevel l))return InteractionResult.SUCCESS;
+        if(v.kind()==1&&(player.isShiftKeyDown()||player.getVehicle()==v)){
+            message(player,v.toggleEngine());return InteractionResult.SUCCESS;
+        }
         ItemStack stack=player.getItemInHand(hand);CompoundTag t=data(stack);
         if(v.kind()==4&&t.contains("bay")&&dimension(l).equals(t.getStringOr("dimension",""))){
             boolean ok=v.linkBay(BlockPos.of(t.getLongOr("bay",0)));message(player,ok?"Drone destination linked. Empty-hand click to depart.":"Stop the drone and choose a bay different from its home.");if(ok){t.remove("bay");save(stack,t);}return InteractionResult.SUCCESS;
@@ -52,9 +55,17 @@ public final class TransportController extends Item {
     @Override public InteractionResult interactLivingEntity(ItemStack stack,Player player,net.minecraft.world.entity.LivingEntity entity,InteractionHand hand){
         return entity instanceof TransportVehicle v?useVehicle(player,hand,v):InteractionResult.PASS;
     }
+    @Override public InteractionResult use(net.minecraft.world.level.Level level,Player player,InteractionHand hand){
+        if(player.getVehicle() instanceof TransportVehicle engine&&engine.kind()==1){
+            if(!level.isClientSide())message(player,engine.toggleEngine());
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.PASS;
+    }
     @Override public InteractionResult useOn(UseOnContext c){
         if(!(c.getLevel() instanceof ServerLevel l))return InteractionResult.SUCCESS;
         Player player=c.getPlayer();if(player==null)return InteractionResult.FAIL;
+        if(player.getVehicle() instanceof TransportVehicle engine&&engine.kind()==1){message(player,engine.toggleEngine());return InteractionResult.SUCCESS;}
         ItemStack held=c.getItemInHand();CompoundTag t=data(held);BlockPos p=c.getClickedPos();var state=l.getBlockState(p);
         if(player.isShiftKeyDown()){save(held,new CompoundTag());message(player,"Transport selection cleared.");return InteractionResult.SUCCESS;}
         if(state.getBlock() instanceof PalletBlock){

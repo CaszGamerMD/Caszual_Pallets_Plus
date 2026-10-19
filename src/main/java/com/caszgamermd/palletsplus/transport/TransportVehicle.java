@@ -29,7 +29,9 @@ public final class TransportVehicle extends PathfinderMob {
     private static final BlockPos NO_STATION=new BlockPos(0,Integer.MIN_VALUE,0);
     private BlockPos stationPassed=NO_STATION;
     private int lastMoveTick=-100;
-    private double progress=.5;
+    private double progress=.5,trainSpeed,indexRemaining=-1;
+    private BlockPos indexRail=NO_STATION;
+    private int indexedCar;
     private String ahead="",behind="",status="Parked";
     private final Deque<Vec3> trail=new ArrayDeque<>();
     public TransportVehicle(EntityType<? extends TransportVehicle> type,Level level){super(type,level);setPersistenceRequired();setNoGravity(true);}
@@ -65,7 +67,7 @@ public final class TransportVehicle extends PathfinderMob {
         setPos(p.getX()+.5+x,p.getY()+y,p.getZ()+.5+z);
     }
     public double length(){return switch(kind()){case 1->3.6;case 2->6.8;case 3->4.4;case 4->3.3;default->1.85;};}
-    private double spacing(TransportVehicle leader){return (length()+leader.length())*.5+.4;}
+    private double spacing(TransportVehicle leader){return TransportMotion.spacing(leader.length(),length());}
     private boolean stationary(){
         if(running||tickCount-lastMoveTick<10)return false;
         TransportVehicle head=this;
@@ -110,13 +112,20 @@ public final class TransportVehicle extends PathfinderMob {
     public String couple(TransportVehicle leader){
         if(kind()!=2&&kind()!=3)return "Select a pallet or passenger car as the rear car.";
         if(leader==this||leader.kind()<1||leader.kind()>3||!ahead.isEmpty()||!leader.behind.isEmpty()||distanceToSqr(leader)>100)return "Coupling unavailable: stop and bring free couplers within 10 blocks.";
+        Set<String> members=new HashSet<>();
         TransportVehicle scan=leader;
-        for(int i=0;i<16;i++){
-            if(scan==this)return "That would form a coupling loop.";
+        while(scan!=null){
+            if(!members.add(scan.getStringUUID()))return "Coupling loop detected.";
             if(scan.ahead.isEmpty())break;
             scan=find(scan.ahead);if(scan==null)return "Lead car is unloaded.";
-            if(i==15)return "Maximum train length reached.";
         }
+        scan=this;
+        while(scan!=null){
+            if(!members.add(scan.getStringUUID()))return "That would form a coupling loop.";
+            if(scan.behind.isEmpty())break;
+            scan=find(scan.behind);if(scan==null)return "Rear car is unloaded.";
+        }
+        if(members.size()>TransportMotion.MAX_CARS+1)return "Maximum train: one engine and ten cars.";
         if(!leader.stationary()||!stationary())return "Stop the entire train before coupling.";
         if(getDirection()!=leader.getDirection())return "Place both cars facing the same track direction.";
         // Coupling is established on a straight, fully loaded stretch of warehouse rail.
@@ -134,78 +143,163 @@ public final class TransportVehicle extends PathfinderMob {
             }
             leader.trail.addLast(point);
         }
-        ahead=leader.getStringUUID();leader.behind=getStringUUID();return "Cars coupled. Start the engine with an empty-hand click.";
+        ahead=leader.getStringUUID();leader.behind=getStringUUID();return "Cars coupled. Board the engine and use the Transport Controller to start.";
     }
     private TransportVehicle find(String id){if(!(level() instanceof ServerLevel l)||id.isEmpty())return null;try{return l.getEntity(UUID.fromString(id)) instanceof TransportVehicle v?v:null;}catch(IllegalArgumentException e){return null;}}
+    /** Engine ticks the complete consist in small steps; entity tick order cannot stretch couplers. */
+    private List<TransportVehicle> consist(){
+        List<TransportVehicle> cars=new ArrayList<>();Set<String> ids=new HashSet<>();
+        TransportVehicle v=this;
+        while(v!=null){
+            if(!ids.add(v.getStringUUID())||cars.size()>TransportMotion.MAX_CARS)return null;
+            cars.add(v);if(v.behind.isEmpty())return cars;
+            TransportVehicle next=find(v.behind);
+            if(next==null||!next.ahead.equals(v.getStringUUID()))return null;
+            v=next;
+        }return null;
+    }
+    public String toggleEngine(){
+        if(kind()!=1||!ahead.isEmpty())return "Use the lead engine.";
+        running=!running;traveling=false;trainSpeed=0;
+        if(running){indexRemaining=-1;indexRail=NO_STATION;indexedCar=0;}
+        status=running?"Engine started — accelerating to 30 m/s":"Engine stopped";return status;
+    }
+    public boolean indexedAt(BlockPos rail){return kind()==1&&indexRail.equals(rail);}
+    public String advanceOneCar(){
+        if(!indexedAt(indexRail)||indexRail.equals(NO_STATION))return "No train at this indexing rail.";
+        if(running)return "Train is already advancing.";
+        var cars=consist();if(cars==null)return "Wait for all coupled cars to load.";
+        if(indexRemaining<=0){
+            if(cars.size()==1){indexRemaining=length();}
+            else{
+                if(indexedCar>=cars.size()-1)return "All cars indexed. Start the engine to depart.";
+                indexRemaining=cars.get(indexedCar+1).spacing(cars.get(indexedCar));indexedCar++;
+            }
+        }
+        running=true;trainSpeed=0;status="Indexing next car at 2 m/s";return status;
+    }
     @Override public void tick(){
         super.tick();setBoundingBox(makeBoundingBox(position()));setDeltaMovement(Vec3.ZERO);
         if(!(level() instanceof ServerLevel l)||!isAlive())return;
         if(tickCount%10==0)TransitWorldData.get(l).record(this);
-        if(!ahead.isEmpty()){follow(l);return;}
+        if(!ahead.isEmpty()){running=false;return;}
         if(kind()==4&&awaitingBayUnload&&!running&&tickCount%20==0){
             if(!hasCargo()||serviceBay(l,false)){awaitingBayUnload=false;status="Unloaded at bay — click to collect next pallet and depart";}else status="Waiting for clear pallet space beside bay";
         }
-        if(!running)return;
+        if(!running){trainSpeed=0;if(kind()==1){var parked=consist();if(parked!=null)for(int i=1;i<parked.size();i++)if(!parked.get(i).follow(l,.25))break;}return;}
         if(kind()==4){fly(l);return;}
         if(kind()==2||kind()==3){status="Needs an engine";return;}
-        // Never pull a train across an unloaded/destroyed trailing car.
-        TransportVehicle tail=find(behind);
-        if(!behind.isEmpty()&&(tail==null||distanceToSqr(tail)>Math.pow(tail.spacing(this)+1.5,2))){status="Waiting for coupled car";return;}
-        if(!GuidewayBlock.complete(l,node)){status="Guideway missing";return;}
+        var cars=kind()==1?consist():List.of(this);
+        if(cars==null){trainSpeed=0;status="Waiting for all coupled cars";return;}
+        for(int i=1;i<cars.size();i++)if(cars.get(i-1).distanceToSqr(cars.get(i))>Math.pow(cars.get(i).spacing(cars.get(i-1))+2,2)){
+            trainSpeed=0;status="Waiting for coupled car";return;
+        }
+        // Settle placement slack while the engine waits, before accelerating the consist.
+        for(int i=1;i<cars.size();i++)if(!cars.get(i).follow(l,.25)){trainSpeed=0;status="Aligning coupled cars";return;}
+        double budget=kind()==0?TransportMotion.CONVEYOR_SPEED:indexRemaining>0?TransportMotion.INDEX_SPEED:(trainSpeed=TransportMotion.accelerate(trainSpeed));
+        while(budget>1e-8&&running){
+            double moved=advanceGuideway(l,Math.min(budget,TransportMotion.STEP));
+            if(moved<=1e-8){trainSpeed=0;break;}
+            budget-=moved;
+            if(indexRemaining>0){
+                indexRemaining=Math.max(0,indexRemaining-moved);
+                if(indexRemaining<1e-7){running=false;traveling=false;trainSpeed=0;status="Index stop — click indexing rail for next car";}
+            }
+            boolean followersReady=true;
+            for(int i=1;i<cars.size();i++)if(!cars.get(i).follow(l,TransportMotion.STEP+.002)){followersReady=false;break;}
+            if(!followersReady){trainSpeed=0;status="Waiting for coupled car route";break;}
+
+        }
+    }
+    private double advanceGuideway(ServerLevel l,double budget){
+        if(!GuidewayBlock.complete(l,node)){traveling=false;status="Guideway missing";return 0;}
         var state=l.getBlockState(node);var way=(GuidewayBlock)state.getBlock();
         boolean power=GuidewayBlock.powered(l,node);
-        if(kind()==1&&progress>=.5&&!node.equals(stationPassed)&&StationPostBlock.at(l,node,state.getValue(GuidewayBlock.FACING))){stationPassed=node;running=false;traveling=false;status="Station stop — click engine or post to depart";return;}
-        if((way.rail()&&power)||(way.kind.equals("conveyor_hold")&&power&&progress>=.5)){traveling=false;status="Hold bar / redstone stop";return;}
+        boolean indexStop=kind()==1&&way.kind.equals("pallet_rail_index")&&indexRemaining<0&&!node.equals(stationPassed);
+        boolean stationStop=kind()==1&&!node.equals(stationPassed)&&StationPostBlock.at(l,node,state.getValue(GuidewayBlock.FACING));
+        boolean hold=way.kind.equals("conveyor_hold")&&power;
+        if(progress>=.5-1e-8&&(indexStop||stationStop||hold)){
+            traveling=false;
+            if(indexStop){indexRail=node;indexedCar=0;indexRemaining=0;stationPassed=node;running=false;status="Index stop — click rail or pulse redstone for next car";}
+            else if(stationStop){stationPassed=node;running=false;status="Station stop — use controller or post to depart";}
+            else status="Hold bar / redstone stop";
+            return 0;
+        }
+        if(way.rail()&&!way.kind.equals("pallet_rail_index")&&power){traveling=false;status="Redstone stop";return 0;}
         int turn=way.kind.endsWith("_left")?-1:way.kind.endsWith("_right")?1:0;
         if(way.kind.equals("conveyor_logic")){
-            if(latchedRoute<0&&l.getBlockEntity(node) instanceof LogicConveyorEntity logic){int selected=logic.route(power);if(selected==3){traveling=false;status="Logic conveyor holding";return;}latchedRoute=selected;}
+            if(latchedRoute<0&&l.getBlockEntity(node) instanceof LogicConveyorEntity logic){int selected=logic.route(power);if(selected==3){traveling=false;status="Logic conveyor holding";return 0;}latchedRoute=selected;}
             turn=latchedRoute==1?-1:latchedRoute==2?1:0;
         }
         Direction entry=state.getValue(GuidewayBlock.FACING);
         Direction out=turn<0?entry.getCounterClockWise():turn>0?entry.getClockWise():entry;
         BlockPos next=node.relative(out,3).above(way.rise());
-        double speed=kind()==0?.055:.10;
-        double nextProgress=Math.min(1,progress+speed/TransportPath.length(turn,way.rise()));
-        if(nextProgress>=1){
-            if(!GuidewayBlock.complete(l,next)){traveling=false;status="End of route";return;}
-            var ns=l.getBlockState(next);var nw=(GuidewayBlock)ns.getBlock();
-            if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){traveling=false;status="Incompatible guideway direction";return;}
+        double length=TransportPath.length(turn,way.rise()),limit=(indexStop||stationStop||hold)&&progress<.5?.5:1;
+        double distance=TransportMotion.distance(budget,(limit-progress)*length);
+        if(indexRemaining>0)distance=Math.min(distance,indexRemaining);
+        double nextProgress=Math.min(limit,progress+distance/length);
+        if(nextProgress>=1-1e-8){
+            // Reach the end of this module and retain cargo there until an exit is available.
+            nextProgress=1;
         }
-        int rotation=switch(state.getValue(GuidewayBlock.FACING)){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
+        int rotation=switch(entry){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
         var point=TransportPath.sample(turn,way.rise(),rotation,nextProgress);
         Vec3 goal=new Vec3(node.getX()+.5+point.x(),node.getY()+point.y(),node.getZ()+.5+point.z());
         traveling=true;
-        if(step(l,goal,speed+.002)){
-            progress=nextProgress;
-            if(progress>=1){node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;traveling=false;}
+        if(!step(l,goal,distance+.00001))return 0;
+        progress=nextProgress;
+        if(progress>=1-1e-8){
+            if(!GuidewayBlock.complete(l,next)){traveling=false;status="End of route";return distance;}
+            var ns=l.getBlockState(next);var nw=(GuidewayBlock)ns.getBlock();
+            if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){traveling=false;status="Incompatible guideway direction";return distance;}
+            node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;
         }
+        return distance;
     }
     private void record(){trail.addLast(position());while(trail.size()>400)trail.removeFirst();}
-    private void follow(ServerLevel l){
+    private boolean follow(ServerLevel l,double budget){
         TransportVehicle leader=find(ahead);
-        if(leader==null||!leader.behind.equals(getStringUUID())){status="Waiting for lead car";return;}
-        if(leader.trail.isEmpty()){status="Coupled / parked";return;}
-        double spacing=spacing(leader);
-        TransportVehicle tail=find(behind);
-        if(!behind.isEmpty()&&(tail==null||distanceToSqr(tail)>Math.pow(tail.spacing(this)+1.5,2))){status="Waiting for trailing car";return;}
-        Vec3 previous=leader.position(),goal=null;double distance=0;
+        if(leader==null||!leader.behind.equals(getStringUUID())){status="Waiting for lead car";return false;}
+        double spacing=spacing(leader),distance=0;Vec3 previous=leader.position(),goal=null;
         var it=leader.trail.descendingIterator();
-        while(it.hasNext()){Vec3 point=it.next();distance+=previous.distanceTo(point);if(distance>=spacing){goal=point;break;}previous=point;}
-        if(goal==null){status="Taking up coupling slack";return;}
+        while(it.hasNext()){
+            Vec3 point=it.next();double segment=previous.distanceTo(point);
+            if(segment>1e-9&&distance+segment>=spacing){goal=previous.lerp(point,(spacing-distance)/segment);break;}
+            distance+=segment;previous=point;
+        }
+        if(goal==null){status="Taking up coupling slack";return false;}
         BlockPos floor=BlockPos.containing(goal.x,goal.y-.20,goal.z);
-        if(!l.hasChunkAt(floor)||!(l.getBlockState(floor).getBlock() instanceof GuidewayBlock way)||!way.rail()){status="Trailing rail missing";return;}
-        // Rejoining a train never teleports through walls or unloaded chunks.
-        step(l,goal,.11);running=false;
+        if(!l.hasChunkAt(floor)||!(l.getBlockState(floor).getBlock() instanceof GuidewayBlock way)||!way.rail()){status="Trailing rail missing";return false;}
+        running=false;return step(l,goal,budget);
+    }
+    private boolean sameTrain(TransportVehicle other){
+        for(int side=0;side<2;side++){
+            TransportVehicle v=this;
+            for(int i=0;i<=TransportMotion.MAX_CARS&&v!=null;i++){
+                if(v==other)return true;v=find(side==0?v.ahead:v.behind);
+            }
+        }return false;
     }
     private boolean step(ServerLevel l,Vec3 goal,double speed){
+        double remaining=Math.min(speed,position().distanceTo(goal));
+        while(remaining>1e-8){
+            double amount=Math.min(remaining,TransportMotion.STEP);
+            Vec3 delta=goal.subtract(position());
+            Vec3 next=position().add(delta.scale(Math.min(amount,delta.length())/delta.length()));
+            if(!moveSegment(l,next,amount+.000001))return false;
+            remaining-=amount;
+        }
+        return position().distanceTo(goal)<1e-6;
+    }
+    private boolean moveSegment(ServerLevel l,Vec3 goal,double speed){
         Vec3 delta=goal.subtract(position());double distance=delta.length();
-        if(distance<.015)return true;
+        if(distance<1e-8)return true;
         Vec3 change=delta.scale(Math.min(speed,distance)/distance);
-        double yaw=Math.toRadians(getYRot());
+        double yaw=change.horizontalDistanceSqr()>1e-10?Math.atan2(-change.x,change.z):Math.toRadians(getYRot());
         double halfWidth=kind()==4?1.66:1.20,halfLength=length()*.5;
         double ex=Math.abs(Math.cos(yaw))*halfWidth+Math.abs(Math.sin(yaw))*halfLength;
         double ez=Math.abs(Math.sin(yaw))*halfWidth+Math.abs(Math.cos(yaw))*halfLength;
-        AABB next=new AABB(getX()-ex,getY(),getZ()-ez,getX()+ex,getY()+2.8,getZ()+ez).move(change);
+        AABB next=new AABB(getX()-ex,getY(),getZ()-ez,getX()+ex,getY()+2.8,getZ()+ez).move(change).minmax(getBoundingBox());
         BlockPos min=BlockPos.containing(next.minX,next.minY,next.minZ),max=BlockPos.containing(next.maxX,next.maxY,next.maxZ);
         if(l.isOutsideBuildHeight(min)||l.isOutsideBuildHeight(max)||!l.hasChunksAt(min,max)||!l.getWorldBorder().isWithinBounds(min)||!l.getWorldBorder().isWithinBounds(max)){status="Waiting for loaded route";return false;}
         // Guideways form the supporting floor; all other collision must remain clear.
@@ -216,7 +310,7 @@ public final class TransportVehicle extends PathfinderMob {
             if(!shape.isEmpty()&&shape.toAabbs().stream().anyMatch(b->b.move(p).intersects(next))){status="Obstructed";return false;}
         }
         for(TransportVehicle other:l.getEntitiesOfClass(TransportVehicle.class,next)){
-            if(other==this||other.getStringUUID().equals(ahead)||other.getStringUUID().equals(behind))continue;
+            if(other==this||(kind()>=1&&kind()<=3&&sameTrain(other)))continue;
             status="Waiting for transport ahead";return false;
         }
         setPos(getX()+change.x,getY()+change.y,getZ()+change.z);
@@ -250,7 +344,7 @@ public final class TransportVehicle extends PathfinderMob {
             default->new Vec3(end.getX()+.5,end.getY()+.26,end.getZ()+.5);
         };
         traveling=true;
-        if(step(l,goal,.12)){
+        if(step(l,goal,TransportMotion.DRONE_SPEED)){
             if(flightStage<2)flightStage++;
             else{node=end;flightStage=0;returning=!returning;traveling=false;running=false;awaitingBayUnload=hasCargo();status="Docked — unloading pallet beside bay";}
         }
@@ -272,7 +366,12 @@ public final class TransportVehicle extends PathfinderMob {
             }else if(Arrays.stream(cargo).allMatch(PalletCargo::empty)&&getPassengers().isEmpty()){
                 if(kind()>0)player.getInventory().placeItemBackInInventory(new ItemStack(TransportContent.ITEMS.get(TransportContent.VEHICLES[kind()])));discard();return InteractionResult.SUCCESS;
             }
-        }else if(kind()==3){player.startRiding(this,true,false);return InteractionResult.SUCCESS;}
+        }else if(kind()==1||kind()==3){
+            if(!canAddPassenger(player)){player.sendSystemMessage(Component.literal("All seats are occupied."));return InteractionResult.SUCCESS;}
+            player.startRiding(this,false,false);
+            if(kind()==1)player.sendSystemMessage(Component.literal("Use the Transport Controller to start/stop the engine. Sneak to dismount."));
+            return InteractionResult.SUCCESS;
+        }
         else{
             if(kind()==4&&!running){
                 if(awaitingBayUnload&&hasCargo()){player.sendSystemMessage(Component.literal("Clear a supported 2x2 pallet area beside the bay; the drone is waiting to unload."));return InteractionResult.SUCCESS;}
@@ -282,18 +381,24 @@ public final class TransportVehicle extends PathfinderMob {
         }
         player.sendSystemMessage(Component.literal(status));return InteractionResult.SUCCESS;
     }
-    @Override protected Vec3 getPassengerAttachmentPoint(Entity passenger,EntityDimensions dimensions,float scale){return new Vec3(0,1.10,0);}
+    @Override protected boolean canAddPassenger(Entity passenger){return passenger instanceof Player&&getPassengers().size()<TransportMotion.seats(kind());}
+    @Override protected Vec3 getPassengerAttachmentPoint(Entity passenger,EntityDimensions dimensions,float scale){
+        int index=getPassengers().indexOf(passenger);
+        if(index<0||index>=TransportMotion.seats(kind()))return new Vec3(0,1.1,0);
+        var seat=TransportMotion.seat(kind(),index);
+        return new Vec3(seat.x(),seat.y(),seat.z()).yRot((float)Math.toRadians(180-getYRot()));
+    }
     @Override public void die(net.minecraft.world.damagesource.DamageSource cause){
         if(level() instanceof ServerLevel l&&!dropsReleased){dropsReleased=true;for(var c:cargo)c.drop(l,getX(),getY(),getZ());if(kind()>0)Containers.dropItemStack(l,getX(),getY(),getZ(),new ItemStack(TransportContent.ITEMS.get(TransportContent.VEHICLES[kind()])));}
         super.die(cause);
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
-        super.addAdditionalSaveData(out);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
+        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
         out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
     @Override protected void readAdditionalSaveData(ValueInput in){
-        super.readAdditionalSaveData(in);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
+        super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
         awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
         trail.clear();var saved=in.read("trail",Vec3.CODEC.listOf()).orElse(List.of());trail.addAll(saved.subList(Math.max(0,saved.size()-400),saved.size()));for(int i=0;i<3;i++)cargo[i].load(in,i);sync();setNoGravity(true);
     }

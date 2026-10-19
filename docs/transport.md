@@ -23,7 +23,7 @@ All 216 inventory slots, four wood selections/plastic tint, filter settings, and
 
 ## Trains
 
-Place an engine and cars on a continuous straight rail stretch. Leave six blocks between an engine and its first flatbed center, or nine between long flatbeds when coupling. Click the two cars with the Transport Controller, in either order. The track direction determines front/rear; both must face the same way, be stopped, have free couplers and sit on continuous straight rail within ten blocks. Failed attempts keep the first selection, so adjust the cars and retry. Repeat from front to back. Empty-hand click the engine to start or pause. Empty-hand click a passenger car to board; use the normal dismount key to leave.
+Place an engine and cars on a continuous straight rail stretch. Leave six blocks between an engine and its first flatbed center, or nine between long flatbeds when coupling. Click the two cars with the Transport Controller, in either order. The track direction determines front/rear; both must face the same way, be stopped, have free couplers and sit on continuous straight rail within ten blocks. Failed attempts keep the first selection, so adjust the cars and retry. Repeat from front to back. Empty-hand click the engine to board. Use the Transport Controller while seated to start/pause, or sneak-use it on the engine from outside. Empty-hand click a passenger car to board; use the normal dismount key to leave.
 
 Pause the engine before loading or uncoupling. Sneak-click a stopped car with an empty hand to uncouple; sneak-click an empty, uncoupled vehicle again to pick it up. Redstone alongside any rail cell stops the engine. Place a **Train Station Post** two blocks to either side of a rail module center, at rail height or one block higher. The engine stops at that module center and stays stopped until you click the engine or post with an empty hand. Use a straight track module for stations.
 
@@ -58,3 +58,5 @@ An empty drone collects a **wrapped ground pallet** when you click it to depart 
 ## Corner model rebuild (preview 5)
 
 Left/right rails use continuous quarter-pixel curve edges, solid angled sleepers and a gauge matched to the straight rail ends. The square backing has been removed from rail corners. Conveyor corners use a curved rubber transfer belt with steel edges, yellow safety trim and end rollers. Texture coordinates continue across curved strips instead of repeating an entire texture on every sliver. Existing corner blocks update automatically; routes and pallet movement are unchanged.
+
+See the [0.2.0 controls and speeds](../README.md#speeds-seats-and-unloading-020) for seats, indexing rails and the conveyor crank.

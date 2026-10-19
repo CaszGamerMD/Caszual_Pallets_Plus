@@ -44,3 +44,24 @@ java {
 tasks.withType(JavaCompile).configureEach { options.release = 25 }
 test { useJUnitPlatform() }
 tasks.named('sourcesJar') { dependsOn tasks.named('generateTransport') }
+
+// Test-only mod: exercises real world/entity ticks, never packaged in the addon.
+sourceSets {
+    integration {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+loom {
+    mods {
+        palletsplus_integration { sourceSet sourceSets.integration }
+    }
+    runs {
+        integrationServer {
+            server()
+            source sourceSets.integration
+            runDir 'run-integration'
+            vmArg '-Dpalletsplus.integration=true'
+        }
+    }
+}
