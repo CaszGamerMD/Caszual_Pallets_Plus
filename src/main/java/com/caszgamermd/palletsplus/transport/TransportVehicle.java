@@ -276,7 +276,8 @@ public final class TransportVehicle extends PathfinderMob {
         var it=leader.trail.descendingIterator();
         while(it.hasNext()){
             Vec3 point=it.next();double segment=previous.distanceTo(point);
-            if(segment>1e-9&&distance+segment>=spacing){goal=previous.lerp(point,(spacing-distance)/segment);break;}
+            // Allow sub-micron floating-point error in the sampled coupler trail.
+            if(segment>1e-9&&distance+segment+1e-6>=spacing){goal=previous.lerp(point,Math.clamp((spacing-distance)/segment,0,1));break;}
             distance+=segment;previous=point;
         }
         if(goal==null){status="Taking up coupling slack";return false;}
