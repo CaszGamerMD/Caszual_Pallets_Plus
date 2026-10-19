@@ -11,7 +11,7 @@ d.text((24,20),'REBUILT CORNERS / ACTUAL MODEL GEOMETRY',font=font,fill='#edf1f5
 for index,name in enumerate(('pallet_rail_left','pallet_rail_right','conveyor_left','conveyor_right')):
  x0=24+(index%2)*550;y0=75+(index//2)*510
  d.rounded_rectangle((x0,y0,x0+520,y0+490),12,fill='#26303a')
- m=json.loads((root/f'src/main/resources/assets/caszual_additions/models/block/transport/{name}_item.json').read_text())
+ m=json.loads((root/f'build/generated/transport/assets/caszual_additions/models/block/transport/{name}_item.json').read_text())
  for e in sorted(m['elements'],key=lambda a:a['to'][1]):
   x,y,z=e['from'];X,Y,Z=e['to'];points=[(x,z),(X,z),(X,Z),(x,Z)]
   if 'rotation' in e:
@@ -21,4 +21,5 @@ for index,name in enumerate(('pallet_rail_left','pallet_rail_right','conveyor_le
   d.polygon(points,fill=colors[e['faces']['up']['texture'][1:]])
  d.text((x0+20,y0+455),name.replace('_',' ').title(),font=font,fill='#edf1f5')
 d.text((24,1090),'Repository geometry with flat material swatches; not an in-game screenshot.',font=small,fill='#a9b8c2')
-canvas.save(root/'docs/transport/corner-geometry-preview.png')
+(ROOT if 'ROOT' in globals() else root).joinpath('build/previews').mkdir(parents=True,exist_ok=True)
+canvas.save(root/'build/previews/corner-geometry-preview.png')

@@ -1,6 +1,6 @@
-# Pallet transport — feature branch
+# Caszual Pallets Plus — transport guide
 
-Target: Fabric 26.2. This branch adds transport without merging the feature into main.
+Target: Fabric 26.2, Java 25. Install this addon alongside regular Caszual Additions. See the repository README for migration instructions.
 
 ## Equipment
 
@@ -8,7 +8,7 @@ Target: Fabric 26.2. This branch adds transport without merging the feature into
 - **Warehouse rail:** separate three-wide rail modules, straight and left/right turns. These vehicles do not use vanilla minecart rails. Allow generous clearance for long cars around corners.
 - **Train:** an engine, a flatbed holding three full pallets in a row, and a passenger carriage. Cars retain their cargo and couplings across saves.
 - **Drone:** carries one pallet beneath a four-rotor frame. Deploy it on a complete 3×3 parking bay. Link a second bay in the same dimension; there is no 128-block limit.
-- **Transport Controller:** selects pallets/carriers, transfers cargo, couples cars, and links drone destinations. Available with the equipment in the Caszual creative tab and Fun Barrel tag; each item has its own recipe.
+- **Transport Controller:** selects pallets/carriers, transfers cargo, couples cars, and links drone destinations. Available with the equipment in the Caszual Pallets Plus creative tab and Fun Barrel tag; each item has its own recipe.
 
 ## Loading and unloading
 

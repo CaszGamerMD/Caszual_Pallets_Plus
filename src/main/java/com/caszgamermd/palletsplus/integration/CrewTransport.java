@@ -16,7 +16,7 @@ public final class CrewTransport {
     public static String deliverTrain(ServerLevel level,ServerPlayer player,TransportVehicle train){
         if(train.kind()!=2)return "Choose a pallet flatbed car.";
         var rig=moving(level,player);
-        return rig==null?"Wait for your four Golems to finish lifting the pallet.":((TransportCrew)rig).palletsplus$requestTrain(train);
+        return rig==null?"Wait for your four Golems to finish lifting the pallet.":((TransportCrew)(Object)rig).palletsplus$requestTrain(train);
     }
     public static void initialize(){
         UseBlockCallback.EVENT.register((player,level,hand,hit)->{
@@ -26,7 +26,7 @@ public final class CrewTransport {
             if(player instanceof ServerPlayer sp&&level instanceof ServerLevel server){
                 var rig=moving(server,sp);
                 BlockPos root=GuidewayBlock.root(hit.getBlockPos(),state);
-                sp.sendSystemMessage(Component.literal(rig==null?"Wait for your four Golems to finish lifting the pallet.":((TransportCrew)rig).palletsplus$requestConveyor(server,root)));
+                sp.sendSystemMessage(Component.literal(rig==null?"Wait for your four Golems to finish lifting the pallet.":((TransportCrew)(Object)rig).palletsplus$requestConveyor(server,root)));
             }
             return InteractionResult.SUCCESS;
         });

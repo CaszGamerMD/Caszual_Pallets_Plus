@@ -10,7 +10,7 @@ canvas=Image.new('RGB',(1500,1470),'#141b24');draw=ImageDraw.Draw(canvas)
 entries=[('pallet_engine','Train engine'),('pallet_car','Three-pallet flatbed'),('passenger_car','Passenger carriage'),('pallet_drone','Pallet drone'),('conveyor_straight_item','Straight conveyor'),('conveyor_left_item','Left conveyor'),('pallet_rail_left_item','Left corner rail'),('drone_parking_bay_item','Drone parking bay'),('conveyor_right_item','Right corner conveyor'),('pallet_rail_right_item','Right corner rail'),('train_station_post','Train station post'),('pallet_transit_computer','Pallet transit computer')]
 for idx,(name,label) in enumerate(entries):
  col,row=idx%4,idx//4;x0,y0=col*375,row*470+50
- model=json.loads((ROOT/f'src/main/resources/assets/caszual_additions/models/block/transport/{name}.json').read_text())
+ model=json.loads((ROOT/f'build/generated/transport/assets/caszual_additions/models/block/transport/{name}.json').read_text())
  faces=[];points=[]
  def project(p):
   x,y,z=p;return ((x-z)*.707,(x+z)*.3535-y*.866)
@@ -34,4 +34,5 @@ for idx,(name,label) in enumerate(entries):
  draw.text((x0+22,y0+433),f'{len(model["elements"])} model elements',fill='#94a7ba',font=small)
 draw.text((22,18),'PALLET TRANSPORT / MODEL GEOMETRY REVIEW',fill='#edf1f5',font=font)
 draw.text((22,1450),'Rendered from repository geometry. Flat swatches approximate materials; this is not an in-game screenshot.',fill='#94a7ba',font=small)
-canvas.save(ROOT/'docs/transport/model-geometry-preview.png')
+(ROOT if 'ROOT' in globals() else root).joinpath('build/previews').mkdir(parents=True,exist_ok=True)
+canvas.save(ROOT/'build/previews/model-geometry-preview.png')
