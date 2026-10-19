@@ -16,7 +16,7 @@ public final class TransportChecks implements ModInitializer {
     private TransportVehicle engine,conveyor,extra;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled;
-    private int elapsed,coupledTick;
+    private int elapsed,coupledTick,nextCouple=1,couplingTicks;
     public void onInitialize(){
         if(!Boolean.getBoolean("palletsplus.integration"))return;
         ServerLifecycleEvents.SERVER_STARTED.register(server->{try{setup(server);}catch(Throwable ex){fail(server,ex);}});
@@ -56,11 +56,19 @@ public final class TransportChecks implements ModInitializer {
     private void near(double actual,double expected,String name){if(Math.abs(actual-expected)>.015)throw new AssertionError(name+": expected "+expected+", got "+actual);}
     private void verify(MinecraftServer server){
         if(!coupled){
-            for(int i=1;i<cars.size();i++){
-                String result=cars.get(i).couple(cars.get(i-1));
-                if(!result.startsWith("Cars coupled"))throw new AssertionError("Car "+i+": "+result);
+            if(++couplingTicks>300)throw new AssertionError("Timed out resolving the newly spawned train's entity UUIDs at car "+nextCouple);
+            // Freshly spawned entities can enter the server's UUID lookup on
+            // different ticks. Couple one car per tick, retrying if a lead
+            // entity is still being registered. Never bypass actual checks.
+            if(nextCouple<cars.size()){
+                String result=cars.get(nextCouple).couple(cars.get(nextCouple-1));
+                if(result.startsWith("Cars coupled"))nextCouple++;
+                else if(!result.equals("Lead car is unloaded."))throw new AssertionError("Car "+nextCouple+": "+result);
+                return;
             }
-            if(!extra.couple(cars.getLast()).startsWith("Maximum train"))throw new AssertionError("Eleventh car accepted");
+            String tooMany=extra.couple(cars.getLast());
+            if(tooMany.equals("Lead car is unloaded."))return;
+            if(!tooMany.startsWith("Maximum train"))throw new AssertionError("Eleventh car accepted: "+tooMany);
             extra.discard();
             coupled=true;coupledTick=engine.tickCount;
             engine.toggleEngine();
