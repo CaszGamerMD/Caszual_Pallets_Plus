@@ -258,6 +258,8 @@ public final class TransportVehicle extends PathfinderMob {
     @Override protected InteractionResult mobInteract(Player player,InteractionHand hand){
         if(level().isClientSide())return InteractionResult.SUCCESS;
         if(player.getItemInHand(hand).is(com.caszgamermd.caszualadditions.racks.RackContent.STORAGE_SCANNER_ITEM)&&player instanceof net.minecraft.server.level.ServerPlayer sp){
+            String problem=com.caszgamermd.palletsplus.integration.CrewTransport.scannerProblem(player.getItemInHand(hand),(ServerLevel)level());
+            if(!problem.isEmpty()){sp.sendSystemMessage(Component.literal(problem));return InteractionResult.SUCCESS;}
             sp.sendSystemMessage(Component.literal(com.caszgamermd.palletsplus.integration.CrewTransport.deliverTrain((ServerLevel)level(),sp,this)));return InteractionResult.SUCCESS;
         }
         if(player.getItemInHand(hand).is(TransportContent.CONTROLLER))return TransportController.useVehicle(player,hand,this);

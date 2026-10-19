@@ -3,7 +3,7 @@ package com.caszgamermd.palletsplus;
 import com.caszgamermd.palletsplus.transport.TransportContent;
 import com.caszgamermd.palletsplus.integration.CrewTransport;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -19,8 +19,8 @@ public final class PalletsPlus implements ModInitializer {
         TransportContent.initialize();
         CrewTransport.initialize();
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB,Identifier.fromNamespaceAndPath(MOD_ID,"transport"),
-            FabricItemGroup.builder().title(Component.literal("Caszual Pallets Plus"))
+            FabricCreativeModeTab.builder().title(Component.literal("Caszual Pallets Plus"))
                 .icon(()->new ItemStack(TransportContent.ITEMS.get("pallet_engine")))
-                .displayItems((parameters,output)->TransportContent.ITEMS.values().forEach(output::accept)).build());
+                .displayItems((parameters,output)->TransportContent.ITEMS.values().forEach(item->output.accept(new ItemStack(item)))).build());
     }
 }
