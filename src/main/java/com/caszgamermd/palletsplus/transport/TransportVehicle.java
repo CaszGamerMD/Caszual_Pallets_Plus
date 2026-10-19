@@ -145,7 +145,19 @@ public final class TransportVehicle extends PathfinderMob {
         }
         ahead=leader.getStringUUID();leader.behind=getStringUUID();return "Cars coupled. Board the engine and use the Transport Controller to start.";
     }
-    private TransportVehicle find(String id){if(!(level() instanceof ServerLevel l)||id.isEmpty())return null;try{return l.getEntity(UUID.fromString(id)) instanceof TransportVehicle v?v:null;}catch(IllegalArgumentException e){return null;}}
+    private TransportVehicle find(String id){
+        if(!(level() instanceof ServerLevel l)||id.isEmpty())return null;
+        try{
+            UUID key=UUID.fromString(id);
+            if(l.getEntity(key) instanceof TransportVehicle v)return v;
+            // Freshly spawned cars can be in the section tracker before the
+            // server's UUID lookup catches up. Search nearby loaded sections
+            // as a bounded fallback; never force-load a missing car here.
+            for(TransportVehicle candidate:l.getEntitiesOfClass(TransportVehicle.class,getBoundingBox().inflate(120,16,120)))
+                if(candidate.getUUID().equals(key))return candidate;
+        }catch(IllegalArgumentException ignored){}
+        return null;
+    }
     /** Engine ticks the complete consist in small steps; entity tick order cannot stretch couplers. */
     private List<TransportVehicle> consist(){
         List<TransportVehicle> cars=new ArrayList<>();Set<String> ids=new HashSet<>();
