@@ -78,7 +78,12 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;}
-        if(moveTicks==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
+        if(moveTicks==100){
+            near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
+            var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
+            if(record==null||!record.get("active").getAsBoolean())
+                throw new AssertionError("Moving engine must publish an active chunk-ticket record");
+        }
         if(moveTicks==220){
             near(engine.getZ(),-149.5,"Index rail centre stop");
             if(!engine.indexedAt(new BlockPos(8,64,-150)))throw new AssertionError("Indexer did not capture engine");
@@ -89,6 +94,9 @@ public final class TransportChecks implements ModInitializer {
             near(engine.getZ(),-155.1,"Index advance distance");
             near(cars.get(1).getZ(),-149.5,"First car at unloading marker");
             for(int i=1;i<cars.size();i++)near(cars.get(i).getZ()-cars.get(i-1).getZ(),TransportMotion.spacing(cars.get(i-1).length(),cars.get(i).length()),"Coupler "+i);
+            var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
+            if(record==null||record.get("active").getAsBoolean())
+                throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed)throw new AssertionError("Missing check");
             LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing");
             engine=null;server.halt(false);
