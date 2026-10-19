@@ -105,6 +105,8 @@ public final class TransportVehicle extends PathfinderMob {
     public boolean hasCargo(){return Arrays.stream(cargo).anyMatch(c->!c.empty());}
     public boolean linkBay(BlockPos p){if(kind()!=4||!stationary()||p.equals(home))return false;destination=p;linkedBay=true;flightStage=0;returning=false;return true;}
     public boolean flightActive(){return kind()==4&&linkedBay&&(running||traveling||awaitingBayUnload);}
+    /** Parked cars never consume tickets. The engine tickets behind itself for the consist. */
+    public boolean transportChunksActive(){return kind()==4?flightActive():(kind()==0||kind()==1)&&running;}
     public BlockPos flightDestination(){return awaitingBayUnload?node:returning?home:destination;}
     public String transitStatus(){return status;}
     public void releaseStation(){if(kind()==1&&!running&&status.startsWith("Station")){running=true;status="Departing station";}}
