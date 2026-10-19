@@ -8,8 +8,10 @@ import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 import java.util.*;
 
-/** Expiring, mod-owned simulation tickets. No /forceload state is changed.
- * Saved flight records re-establish tickets after a server restart. */
+/** Expiring, mod-owned simulation tickets for drone, train and conveyor trips.
+ * Saved active transport records re-establish tickets after a server restart.
+ * Parked vehicles and stopped station cars do not keep chunks loaded.
+ * Never modifies the player's /forceload list. */
 public final class DroneChunkLoading {
     private static TicketType ticket;
     private static final Map<String,Integer> absentTicks=new HashMap<>();
@@ -21,17 +23,36 @@ public final class DroneChunkLoading {
             for(var level:server.getAllLevels()){
                 var data=TransitWorldData.get(level);
                 for(var entry:new ArrayList<>(data.vehicles.entrySet())){
-                    var record=entry.getValue();if(!record.get("active").getAsBoolean())continue;
+                    var record=entry.getValue();
+                    if(!record.has("active")||!record.get("active").getAsBoolean()||
+                        !record.has("kind")||!record.has("x")||!record.has("z")||
+                        !record.has("tx")||!record.has("tz"))continue;
+                    int kind=record.get("kind").getAsInt();
+                    if(kind!=0&&kind!=1&&kind!=4)continue;
                     double x=record.get("x").getAsDouble(),z=record.get("z").getAsDouble();
                     double tx=record.get("tx").getAsDouble()+.5,tz=record.get("tz").getAsDouble()+.5;
-                    double dx=tx-x,dz=tz-z,len=Math.hypot(dx,dz);
+                    if(!Double.isFinite(x)||!Double.isFinite(z)||!Double.isFinite(tx)||!Double.isFinite(tz))continue;
                     ChunkPos here=new ChunkPos((int)Math.floor(x)>>4,(int)Math.floor(z)>>4);
-                    Set<ChunkPos> chunks=new HashSet<>();chunks.add(here);
-                    // Continuous two-second corridor at 45 m/s, with margin for saved-position refresh.
-                    for(double ahead=0;ahead<=Math.min(96,len);ahead+=16)
-                        chunks.add(new ChunkPos((int)Math.floor(x+(len==0?0:dx/len*ahead))>>4,(int)Math.floor(z+(len==0?0:dz/len*ahead))>>4));
-                    chunks.add(new ChunkPos((int)Math.floor(tx)>>4,(int)Math.floor(tz)>>4));
-                    for(var chunk:chunks)level.getChunkSource().addTicketWithRadius(ticket,chunk,2);
+                    // Radius 1 limits the footprint of ground transport; drone
+                    // flights keep their existing radius-2 destination coverage.
+                    int radius=kind==4?2:1;
+                    for(var chunk:TransportChunkCorridor.plan(kind,x,z,tx,tz))
+                        level.getChunkSource().addTicketWithRadius(ticket,new ChunkPos(chunk.x(),chunk.z()),radius);
+                    // A train can wrap around a curve; ticket actual car chunks,
+                    // not just the engine's straight projected back corridor.
+                    if(kind==1&&record.has("trailers")&&record.get("trailers").isJsonArray()){
+                        int scanned=0;
+                        for(var element:record.getAsJsonArray("trailers")){
+                            if(++scanned>TransportMotion.MAX_CARS)break;
+                            if(!element.isJsonObject())continue;
+                            var car=element.getAsJsonObject();
+                            if(!car.has("x")||!car.has("z"))continue;
+                            double px=car.get("x").getAsDouble(),pz=car.get("z").getAsDouble();
+                            if(!Double.isFinite(px)||!Double.isFinite(pz))continue;
+                            level.getChunkSource().addTicketWithRadius(ticket,
+                                new ChunkPos((int)Math.floor(px)>>4,(int)Math.floor(pz)>>4),1);
+                        }
+                    }
                     String key=level.dimension().identifier()+"/"+entry.getKey();
                     net.minecraft.world.entity.Entity e;
                     try{e=level.getEntity(UUID.fromString(entry.getKey()));}catch(IllegalArgumentException ex){data.forget(entry.getKey());continue;}

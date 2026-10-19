@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra;
+    private TransportVehicle engine,conveyor,extra,endOfLine;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -38,6 +38,7 @@ public final class TransportChecks implements ModInitializer {
         for(int x=0;x<=1;x++)for(int z=-14;z<=6;z++){level.setChunkForced(x,z,true);level.getChunk(x,z);}
         for(int z=84;z>=-210;z-=3)module(level,new BlockPos(8,64,z),z==-150?"pallet_rail_index":"pallet_rail");
         for(int z=0;z>=-36;z-=3)module(level,new BlockPos(24,64,z),z==-12?"conveyor_hold":"conveyor_straight");
+        module(level,new BlockPos(16,64,0),"conveyor_straight");
         level.setBlock(new BlockPos(26,64,-12),Blocks.REDSTONE_BLOCK.defaultBlockState(),3);
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
@@ -50,6 +51,7 @@ public final class TransportChecks implements ModInitializer {
         z+=TransportMotion.spacing(cars.getLast().length(),6.8);
         extra=vehicle(level,2,8,(int)Math.round((z-.5)/3)*3,z);
         conveyor=vehicle(level,0,24,0,.5);
+        endOfLine=vehicle(level,0,16,0,.5);
         // Defer coupling until the first server tick: addFreshEntity() has queued UUID
         // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
@@ -77,8 +79,20 @@ public final class TransportChecks implements ModInitializer {
         if(++elapsed>800)throw new AssertionError("Simulation did not finish");
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
-        if(conveyor.tickCount==40){near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;}
-        if(moveTicks==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
+        if(conveyor.tickCount==40){
+            near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;
+            var endRecord=TransitWorldData.get(server.overworld()).vehicles.get(endOfLine.getStringUUID());
+            if(endRecord==null||endRecord.get("active").getAsBoolean()||!endOfLine.transitStatus().startsWith("End of route"))
+                throw new AssertionError("Broken conveyor end must safely stop and release chunk tickets");
+        }
+        if(moveTicks==100){
+            near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
+            var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
+            if(record==null||!record.get("active").getAsBoolean())
+                throw new AssertionError("Moving engine must publish an active chunk-ticket record");
+            if(!record.has("trailers")||record.getAsJsonArray("trailers").size()!=10)
+                throw new AssertionError("Active engine must publish all ten trailer coordinates");
+        }
         if(moveTicks==220){
             near(engine.getZ(),-149.5,"Index rail centre stop");
             if(!engine.indexedAt(new BlockPos(8,64,-150)))throw new AssertionError("Indexer did not capture engine");
@@ -89,6 +103,9 @@ public final class TransportChecks implements ModInitializer {
             near(engine.getZ(),-155.1,"Index advance distance");
             near(cars.get(1).getZ(),-149.5,"First car at unloading marker");
             for(int i=1;i<cars.size();i++)near(cars.get(i).getZ()-cars.get(i-1).getZ(),TransportMotion.spacing(cars.get(i-1).length(),cars.get(i).length()),"Coupler "+i);
+            var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
+            if(record==null||record.get("active").getAsBoolean())
+                throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed)throw new AssertionError("Missing check");
             LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing");
             engine=null;server.halt(false);

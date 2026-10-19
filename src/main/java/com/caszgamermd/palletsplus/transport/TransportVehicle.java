@@ -105,6 +105,18 @@ public final class TransportVehicle extends PathfinderMob {
     public boolean hasCargo(){return Arrays.stream(cargo).anyMatch(c->!c.empty());}
     public boolean linkBay(BlockPos p){if(kind()!=4||!stationary()||p.equals(home))return false;destination=p;linkedBay=true;flightStage=0;returning=false;return true;}
     public boolean flightActive(){return kind()==4&&linkedBay&&(running||traveling||awaitingBayUnload);}
+    /** Parked cars never consume tickets. The engine tickets behind itself for the consist. */
+    public boolean transportChunksActive(){return kind()==4?flightActive():(kind()==0||kind()==1)&&running;}
+    /** Exact trailer positions matter on bends: a straight rear corridor alone
+     * may miss the last car when a long consist has rounded a corner. */
+    public boolean hasFollowingCars(){return kind()==1&&!behind.isEmpty();}
+    public List<Vec3> trailingCarPositions(){
+        if(!hasFollowingCars())return List.of();
+        var cars=consist();if(cars==null)return List.of();
+        List<Vec3> positions=new ArrayList<>();
+        for(int i=1;i<cars.size();i++)positions.add(cars.get(i).position());
+        return positions;
+    }
     public BlockPos flightDestination(){return awaitingBayUnload?node:returning?home:destination;}
     public String transitStatus(){return status;}
     public void releaseStation(){if(kind()==1&&!running&&status.startsWith("Station")){running=true;status="Departing station";}}
@@ -224,7 +236,15 @@ public final class TransportVehicle extends PathfinderMob {
         }
     }
     private double advanceGuideway(ServerLevel l,double budget){
-        if(!GuidewayBlock.complete(l,node)){traveling=false;status="Guideway missing";return 0;}
+        // Do not treat unloaded chunks as broken tracks: active ticket
+        // corridors will bring them back. A genuinely broken module stops
+        // renewing tickets rather than loading this area indefinitely.
+        if(!l.hasChunksAt(node.offset(-1,0,-1),node.offset(1,0,1))){
+            traveling=false;status="Waiting for loaded guideway";return 0;
+        }
+        if(!GuidewayBlock.complete(l,node)){
+            running=false;traveling=false;status="Guideway missing — stopped";return 0;
+        }
         var state=l.getBlockState(node);var way=(GuidewayBlock)state.getBlock();
         boolean power=GuidewayBlock.powered(l,node);
         boolean indexStop=kind()==1&&way.kind.equals("pallet_rail_index")&&indexRemaining<0&&!node.equals(stationPassed);
@@ -261,9 +281,16 @@ public final class TransportVehicle extends PathfinderMob {
         if(!step(l,goal,distance+.00001))return 0;
         progress=nextProgress;
         if(progress>=1-1e-8){
-            if(!GuidewayBlock.complete(l,next)){traveling=false;status="End of route";return distance;}
+            if(!l.hasChunksAt(next.offset(-1,0,-1),next.offset(1,0,1))){
+                traveling=false;status="Waiting for loaded route";return distance;
+            }
+            if(!GuidewayBlock.complete(l,next)){
+                running=false;traveling=false;status="End of route — stopped";return distance;
+            }
             var ns=l.getBlockState(next);var nw=(GuidewayBlock)ns.getBlock();
-            if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){traveling=false;status="Incompatible guideway direction";return distance;}
+            if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){
+                running=false;traveling=false;status="Incompatible guideway — stopped";return distance;
+            }
             node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;
         }
         return distance;
