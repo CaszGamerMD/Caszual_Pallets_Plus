@@ -70,7 +70,7 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;}
-        if(moveTicks==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars");
+        if(moveTicks==100)near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
         if(moveTicks==220){
             near(engine.getZ(),-149.5,"Index rail centre stop");
             if(!engine.indexedAt(new BlockPos(8,64,-150)))throw new AssertionError("Indexer did not capture engine");
