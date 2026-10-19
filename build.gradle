@@ -43,3 +43,4 @@ java {
 }
 tasks.withType(JavaCompile).configureEach { options.release = 25 }
 test { useJUnitPlatform() }
+tasks.named('sourcesJar') { dependsOn tasks.named('generateTransport') }
