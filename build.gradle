@@ -1,0 +1,45 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        caszual_pallets_plus {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+version = project.mod_version
+group = project.maven_group
+base { archivesName = project.archives_base_name }
+repositories { mavenCentral() }
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    // A separate required mod: never include/shade its classes into this JAR.
+    compileOnly files('libs/caszual-additions-compile.jar')
+    clientCompileOnly files('libs/caszual-additions-compile.jar')
+    localRuntime files('libs/caszual-additions-compile.jar')
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
+}
+tasks.register('generateTransport', Exec) {
+    commandLine 'python3', 'scripts/generate_transport_models.py'
+    inputs.file 'scripts/generate_transport_models.py'
+    outputs.dir layout.buildDirectory.dir('generated/transport')
+}
+sourceSets.main.resources.srcDir layout.buildDirectory.dir('generated/transport')
+processResources {
+    dependsOn tasks.named('generateTransport')
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand 'version': project.version }
+}
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+test { useJUnitPlatform() }
