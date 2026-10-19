@@ -107,6 +107,16 @@ public final class TransportVehicle extends PathfinderMob {
     public boolean flightActive(){return kind()==4&&linkedBay&&(running||traveling||awaitingBayUnload);}
     /** Parked cars never consume tickets. The engine tickets behind itself for the consist. */
     public boolean transportChunksActive(){return kind()==4?flightActive():(kind()==0||kind()==1)&&running;}
+    /** Exact trailer positions matter on bends: a straight rear corridor alone
+     * may miss the last car when a long consist has rounded a corner. */
+    public boolean hasFollowingCars(){return kind()==1&&!behind.isEmpty();}
+    public List<Vec3> trailingCarPositions(){
+        if(!hasFollowingCars())return List.of();
+        var cars=consist();if(cars==null)return List.of();
+        List<Vec3> positions=new ArrayList<>();
+        for(int i=1;i<cars.size();i++)positions.add(cars.get(i).position());
+        return positions;
+    }
     public BlockPos flightDestination(){return awaitingBayUnload?node:returning?home:destination;}
     public String transitStatus(){return status;}
     public void releaseStation(){if(kind()==1&&!running&&status.startsWith("Station")){running=true;status="Departing station";}}
