@@ -83,6 +83,8 @@ public final class TransportChecks implements ModInitializer {
             var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
             if(record==null||!record.get("active").getAsBoolean())
                 throw new AssertionError("Moving engine must publish an active chunk-ticket record");
+            if(!record.has("trailers")||record.getAsJsonArray("trailers").size()!=10)
+                throw new AssertionError("Active engine must publish all ten trailer coordinates");
         }
         if(moveTicks==220){
             near(engine.getZ(),-149.5,"Index rail centre stop");
