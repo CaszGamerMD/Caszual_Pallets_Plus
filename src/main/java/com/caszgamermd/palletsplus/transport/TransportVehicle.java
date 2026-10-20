@@ -24,7 +24,7 @@ public final class TransportVehicle extends PathfinderMob {
     public final PalletCargo[] cargo={new PalletCargo(),new PalletCargo(),new PalletCargo()};
     private BlockPos node=BlockPos.ZERO,target=BlockPos.ZERO,previousNode=BlockPos.ZERO,home=BlockPos.ZERO,destination=BlockPos.ZERO;
     private Direction heading=Direction.NORTH;
-    private boolean running,traveling,linkedBay,returning,dropsReleased,awaitingBayUnload;
+    private boolean running,traveling,linkedBay,returning,dropsReleased,awaitingBayUnload,automatedBayRoute;
     private int flightStage,latchedRoute=-1;
     private static final BlockPos NO_STATION=new BlockPos(0,Integer.MIN_VALUE,0);
     private BlockPos stationPassed=NO_STATION;
@@ -115,7 +115,19 @@ public final class TransportVehicle extends PathfinderMob {
         return forward>0?a.couple(b):b.couple(a);
     }
     public boolean hasCargo(){return Arrays.stream(cargo).anyMatch(c->!c.empty());}
-    public boolean linkBay(BlockPos p){if(kind()!=4||!stationary()||p.equals(home))return false;destination=p;linkedBay=true;flightStage=0;returning=false;return true;}
+    public boolean linkBay(BlockPos p){if(kind()!=4||!stationary()||p.equals(home))return false;destination=p;linkedBay=true;automatedBayRoute=false;flightStage=0;returning=false;return true;}
+    public boolean atOutputBay(BlockPos p){return kind()==4&&!running&&!returning&&!awaitingBayUnload&&node.equals(p);}
+    /** Adopt the route at this output bay; cargo stays owned by this entity. */
+    public boolean assignBayRoute(BlockPos output,BlockPos input){
+        if(!atOutputBay(output)||input.equals(output))return false;
+        destination=input;home=output;linkedBay=true;automatedBayRoute=true;
+        return true;
+    }
+    public void tickAutomatedBay(ServerLevel level,BlockPos output,BlockPos input){
+        if(!assignBayRoute(output,input)||hasCargo()&&running)return;
+        if(!hasCargo())serviceBay(level,true);
+        if(hasCargo()){running=true;traveling=true;flightStage=0;status="Automatic delivery to INPUT bay";}
+    }
     public boolean flightActive(){return kind()==4&&linkedBay&&(running||traveling||awaitingBayUnload);}
     /** Parked cars never consume tickets. The engine tickets behind itself for the consist. */
     public boolean transportChunksActive(){return kind()==4?flightActive():(kind()==0||kind()==1)&&running;}
@@ -220,7 +232,13 @@ public final class TransportVehicle extends PathfinderMob {
         if(tickCount%10==0)TransitWorldData.get(l).record(this);
         if(!ahead.isEmpty()){running=false;return;}
         if(kind()==4&&awaitingBayUnload&&!running&&tickCount%20==0){
-            if(!hasCargo()||serviceBay(l,false)){awaitingBayUnload=false;status="Unloaded at bay — click to collect next pallet and depart";}else status="Waiting for clear pallet space beside bay";
+            if(!hasCargo()||serviceBay(l,false)){
+                awaitingBayUnload=false;
+                if(automatedBayRoute&&!returning&&!node.equals(home)){
+                    returning=true;running=true;traveling=true;flightStage=0;
+                    status="Pallet delivered — returning to OUTPUT bay";
+                }else status="Unloaded at bay — ready for next shipment";
+            }else status="Waiting for clear pallet space beside INPUT bay";
         }
         if(!running){trainSpeed=0;if(kind()==1){var parked=consist();if(parked!=null)for(int i=1;i<parked.size();i++)if(!parked.get(i).follow(l,.25))break;}return;}
         if(kind()==4){fly(l);return;}
@@ -469,21 +487,77 @@ public final class TransportVehicle extends PathfinderMob {
             }
         }return false;
     }
-    private void fly(ServerLevel l){
-        if(!linkedBay){status="Link a destination parking bay";return;}
-        BlockPos end=returning?home:destination;
-        if(!l.hasChunkAt(end)||!l.getBlockState(end).is(TransportContent.BAY)||!GuidewayBlock.complete(l,end)){status="Waiting for destination bay";return;}
-        double altitude=Math.max(home.getY(),destination.getY())+7;
-        Vec3 goal=switch(flightStage){
-            case 0->new Vec3(getX(),altitude,getZ());
-            case 1->new Vec3(end.getX()+.5,altitude,end.getZ()+.5);
-            default->new Vec3(end.getX()+.5,end.getY()+.26,end.getZ()+.5);
-        };
-        traveling=true;
-        if(step(l,goal,TransportMotion.DRONE_SPEED)){
-            if(flightStage<2)flightStage++;
-            else{node=end;flightStage=0;returning=!returning;traveling=false;running=false;awaitingBayUnload=hasCargo();status="Docked — unloading pallet beside bay";}
+    private boolean clearLanding(ServerLevel level,BlockPos pad){
+        if(!DroneBayRoutes.valid(level,pad))return false;
+        for(TransportVehicle other:level.getEntitiesOfClass(TransportVehicle.class,
+            new AABB(pad).inflate(3,5,3)))
+            if(other!=this&&other.kind()==4)return false;
+        double x=pad.getX()+.5,y=pad.getY()+.26,z=pad.getZ()+.5;
+        AABB cabin=new AABB(x-1.55,y+.05,z-1.55,x+1.55,y+2.75,z+1.55);
+        // Test only blocks above the pad; the drone is allowed to sit on its deck.
+        for(BlockPos pos:BlockPos.betweenClosed(BlockPos.containing(cabin.minX,cabin.minY,cabin.minZ),
+                                                 BlockPos.containing(cabin.maxX,cabin.maxY,cabin.maxZ))){
+            var state=level.getBlockState(pos);
+            if(state.is(TransportContent.BAY)&&pos.getY()==pad.getY())continue;
+            if(!state.getCollisionShape(level,pos).isEmpty()&&
+                state.getCollisionShape(level,pos).toAabbs().stream().anyMatch(box->box.move(pos).intersects(cabin)))
+                return false;
         }
+        return true;
+    }
+    private void fly(ServerLevel l){
+        if(!linkedBay){status="Link a destination parking bay";running=false;return;}
+        BlockPos end=returning?home:destination;
+        if(!l.hasChunkAt(end)||!l.getBlockState(end).is(TransportContent.BAY)||!GuidewayBlock.complete(l,end)){
+            status="Waiting for destination bay";return;
+        }
+        double tx=end.getX()+.5,tz=end.getZ()+.5,landing=end.getY()+.26;
+        // The heightmap only reads chunks that are already loaded by the
+        // expiring flight corridor. Do not synchronously load distant terrain.
+        int xx=(int)Math.floor(getX()),zz=(int)Math.floor(getZ());
+        if(!l.hasChunkAt(new BlockPos(xx,0,zz))){status="Waiting for flight corridor";return;}
+        double ground=l.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,xx,zz);
+        if(flightStage==0){
+            double climbTo=ground+DroneFlightMath.CRUISE_CLEARANCE;
+            double nextY=DroneFlightMath.towards(getY(),climbTo,.35);
+            if(Math.abs(climbTo-getY())<.36){flightStage=1;}
+            else if(!step(l,new Vec3(getX(),nextY,getZ()),.36)){status="Waiting for clear takeoff";return;}
+            status="Taking off gently";return;
+        }
+        if(flightStage==1){
+            double dx=tx-getX(),dz=tz-getZ(),length=Math.hypot(dx,dz);
+            if(length<1.5){flightStage=2;status="Approaching landing bay";return;}
+            double reach=Math.min(length,TransportMotion.DRONE_SPEED);
+            double nx=getX()+dx/length*reach,nz=getZ()+dz/length*reach;
+            BlockPos probe=BlockPos.containing(nx,0,nz);
+            if(!l.hasChunkAt(probe)){status="Waiting for loaded air corridor";return;}
+            double nextGround=l.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
+                probe.getX(),probe.getZ());
+            double desired=DroneFlightMath.desired(getY(),Math.max(ground,nextGround));
+            double nextY=DroneFlightMath.towards(getY(),desired,.35);
+            double horizontal=DroneFlightMath.forwardBudget(nextY,nextGround,reach);
+            if(horizontal==0){nx=getX();nz=getZ();}
+            else{nx=getX()+dx/length*horizontal;nz=getZ()+dz/length*horizontal;}
+            step(l,new Vec3(nx,nextY,nz),TransportMotion.DRONE_SPEED+.36);
+            status=horizontal==0?"Climbing over higher terrain":"Flying 20–40 blocks above terrain";
+            return;
+        }
+        if(!clearLanding(l,end)){
+            // Never collide with a second drone, a player-built structure or
+            // blocked landing pad. Hold above it until the landing is clear.
+            double hover=Math.max(landing+DroneFlightMath.MIN_CLEARANCE,getY());
+            step(l,new Vec3(tx,DroneFlightMath.towards(getY(),hover,.2),tz),TransportMotion.DRONE_SPEED+.2);
+            status="Hovering — parking bay obstructed";return;
+        }
+        double descend=DroneFlightMath.gentleLanding(getY(),landing);
+        if(!step(l,new Vec3(tx,descend,tz),TransportMotion.DRONE_SPEED+.15)){
+            status="Waiting for clear landing approach";return;
+        }
+        if(position().distanceToSqr(tx,landing,tz)<.02){
+            setPos(tx,landing,tz);node=end;flightStage=0;traveling=false;running=false;
+            if(returning){returning=false;status="Returned to OUTPUT bay — awaiting next pallet";}
+            else{awaitingBayUnload=hasCargo();status=hasCargo()?"Landed — unloading at INPUT bay":"Landed at destination bay";}
+        }else status="Soft landing";
     }
     @Override protected InteractionResult mobInteract(Player player,InteractionHand hand){
         if(level().isClientSide())return InteractionResult.SUCCESS;
@@ -530,7 +604,7 @@ public final class TransportVehicle extends PathfinderMob {
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
         super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("corner_join",BlockPos.CODEC,cornerJoin);out.store("corner_from",Vec3.CODEC,cornerFrom);out.store("corner_to",Vec3.CODEC,cornerTo);out.putDouble("corner_distance",cornerDistance);out.putString("guide_heading",heading.getName());out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
-        out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
+        out.putBoolean("automated_bay_route",automatedBayRoute);out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
     @Override protected void readAdditionalSaveData(ValueInput in){
@@ -539,7 +613,7 @@ public final class TransportVehicle extends PathfinderMob {
         heading=current.hasProperty(GuidewayBlock.FACING)?current.getValue(GuidewayBlock.FACING):Direction.NORTH;
         String savedHeading=in.getStringOr("guide_heading",heading.getName());
         for(Direction d:Direction.Plane.HORIZONTAL)if(d.getName().equals(savedHeading)){heading=d;break;}
-        awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
+        automatedBayRoute=in.getBooleanOr("automated_bay_route",false);awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
         trail.clear();var saved=in.read("trail",Vec3.CODEC.listOf()).orElse(List.of());trail.addAll(saved.subList(Math.max(0,saved.size()-400),saved.size()));for(int i=0;i<3;i++)cargo[i].load(in,i);sync();setNoGravity(true);
     }
 }
