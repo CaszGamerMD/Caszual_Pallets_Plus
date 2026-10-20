@@ -66,7 +66,7 @@ public final class DroneBayRoutes {
     }
     public static String link(ServerLevel level,BlockPos output,BlockPos input){
         if(output.equals(input)||!valid(level,output)||!valid(level,input))return "Select two complete, different parking bays.";
-        var source=get(level,output),dest=get(level,input);
+        Bay source=get(level,output),dest=get(level,input);
         if(source==null||!source.output()||dest==null||!dest.input())
             return "First choose an OUTPUT bay, then an INPUT bay.";
         edit(level,output).addProperty("linked",input.asLong());
