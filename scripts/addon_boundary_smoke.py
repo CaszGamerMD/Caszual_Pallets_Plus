@@ -13,7 +13,8 @@ with zipfile.ZipFile(jar) as z:
     assert not any('/checks/' in n for n in names), 'Test-only mod leaked into release'
     assert 'com/caszgamermd/palletsplus/mixin/MovingPalletTransportMixin.class' in names
     assert 'assets/caszual_additions/blockstates/conveyor_left.json' in names
+    assert 'assets/caszual_additions/blockstates/conveyor_t_junction.json' in names
     assert 'assets/caszual_additions/blockstates/pallet_rail_right.json' in names
     tag=json.loads(z.read('data/caszual_additions/tags/item/caszual_content.json'))
-    assert tag['replace'] is False and len(tag['values'])==21
+    assert tag['replace'] is False and len(tag['values'])==22
 print('Addon dependency, warehouse isolation, transport assets and shared discovery tag passed.')
