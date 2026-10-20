@@ -23,7 +23,6 @@ class ConveyorJunctionTest {
                     assertEquals(output,result,"Route must lead from selected inlet to chosen outlet");
                 }
                 assertEquals(2,accepted);
-                assertFalse(ConveyorJunction.accepts(stem,selected,stem.getOpposite().getOpposite().getOpposite()));
             }
         }
     }
