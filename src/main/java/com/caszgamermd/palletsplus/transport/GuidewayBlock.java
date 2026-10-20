@@ -32,6 +32,10 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     public boolean junction(){return kind.equals("conveyor_t_junction");}
     public boolean rail(){return kind.startsWith("pallet_rail");}
     public boolean bay(){return kind.equals("drone_parking_bay");}
+    @Override protected boolean isSignalSource(BlockState state){return bay();}
+    @Override protected int getSignal(BlockState state,BlockGetter level,BlockPos pos,Direction direction){
+        return bay()&&state.getValue(POWERED)?15:0;
+    }
     public int rise(){return kind.endsWith("_up")?1:kind.endsWith("_down")?-1:0;}
     public Direction exit(Direction entry){return kind.endsWith("_left")?entry.getCounterClockWise():kind.endsWith("_right")?entry.getClockWise():entry;}
     public static boolean complete(Level l,BlockPos p){
@@ -96,6 +100,11 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             " — the other two arms are inputs.";
     }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
+        if(bay()){
+            if(l instanceof ServerLevel server)
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(DroneBayRoutes.mode(server,root(p,s))));
+            return net.minecraft.world.InteractionResult.SUCCESS;
+        }
         if(junction()){
             if(l instanceof ServerLevel server)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(cycleJunction(server,root(p,s))));
             return net.minecraft.world.InteractionResult.SUCCESS;

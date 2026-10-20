@@ -32,7 +32,7 @@ public final class TransportContent {
         STATION=block("train_station_post",StationPostBlock::new);
         PLATE=block("pallet_pressure_plate",PalletPlateBlock::new);
         COMPUTER=block("pallet_transit_computer",TransitComputerBlock::new);
-        DroneChunkLoading.initialize();TransitNet.initialize();
+        DroneChunkLoading.initialize();DroneBayAutomation.initialize();TransitNet.initialize();
         var bayKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("drone_parking_bay"));
         BAY=Registry.register(BuiltInRegistries.BLOCK,bayKey,new GuidewayBlock("drone_parking_bay",BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(4).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().setId(bayKey)));
         var bik=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("drone_parking_bay"));
@@ -49,6 +49,9 @@ public final class TransportContent {
         ITEMS.put("transport_controller",CONTROLLER);
         var crankKey=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("conveyor_crank"));
         ITEMS.put("conveyor_crank",Registry.register(BuiltInRegistries.ITEM,crankKey,new ConveyorCrank(new Item.Properties().stacksTo(1).setId(crankKey))));
+        var linkKey=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("parking_bay_link"));
+        ITEMS.put("parking_bay_link",Registry.register(BuiltInRegistries.ITEM,linkKey,
+            new ParkingBayLink(new Item.Properties().stacksTo(1).setId(linkKey))));
         var ek=ResourceKey.create(Registries.ENTITY_TYPE,PalletsPlus.legacyId("pallet_transport"));
         VEHICLE=Registry.register(BuiltInRegistries.ENTITY_TYPE,ek,EntityType.Builder.<TransportVehicle>of(TransportVehicle::new,MobCategory.MISC).sized(2.4f,2.5f).build(ek));
         FabricDefaultAttributeRegistry.register(VEHICLE,TransportVehicle.attributes());

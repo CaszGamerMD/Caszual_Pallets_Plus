@@ -16,5 +16,5 @@ with zipfile.ZipFile(jar) as z:
     assert 'assets/caszual_additions/blockstates/conveyor_t_junction.json' in names
     assert 'assets/caszual_additions/blockstates/pallet_rail_right.json' in names
     tag=json.loads(z.read('data/caszual_additions/tags/item/caszual_content.json'))
-    assert tag['replace'] is False and len(tag['values'])==22
+    assert tag['replace'] is False and len(tag['values'])==23
 print('Addon dependency, warehouse isolation, transport assets and shared discovery tag passed.')
