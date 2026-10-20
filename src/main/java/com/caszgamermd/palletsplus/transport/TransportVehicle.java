@@ -54,13 +54,23 @@ public final class TransportVehicle extends PathfinderMob {
     public void sync(){entityData.set(DECK0,cargo[0].deck.copy());entityData.set(DECK1,cargo[1].deck.copy());entityData.set(DECK2,cargo[2].deck.copy());int n=0;for(int i=0;i<3;i++)n|=cargo[i].visible()<<(i*5);entityData.set(LOAD,n);if(level() instanceof ServerLevel l)TransitWorldData.get(l).record(this);}
     public void configure(int kind,BlockPos p,Direction d){
         entityData.set(KIND,kind);node=p;target=p;previousNode=p;home=p;heading=d;
+        var placed=level().getBlockState(p);
+        if(kind==0&&placed.getBlock() instanceof GuidewayBlock junction&&junction.junction()){
+            Direction stem=placed.getValue(GuidewayBlock.FACING);
+            int outlet=placed.getValue(GuidewayBlock.OUTLET);
+            for(int side=0;side<3;side++){
+                Direction possible=ConveyorJunction.port(stem,side).getOpposite();
+                if(ConveyorJunction.accepts(stem,outlet,possible)){heading=possible;break;}
+            }
+        }
         setYRot(d.toYRot());setYBodyRot(getYRot());running=kind==0;
         double x=0,y=.26,z=0;
         var state=level().getBlockState(p);
         if(state.getBlock() instanceof GuidewayBlock way&&!way.bay()){
             int turn=way.kind.endsWith("_left")?-1:way.kind.endsWith("_right")?1:0;
+            if(way.junction())turn=ConveyorJunction.turn(state.getValue(GuidewayBlock.FACING),state.getValue(GuidewayBlock.OUTLET),heading);
             if(way.kind.equals("conveyor_logic"))progress=0;
-            int rotation=switch(d){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
+            int rotation=switch(heading){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
             var point=TransportPath.sample(turn,way.rise(),rotation,progress);
             x=point.x();y=point.y();z=point.z();
         }
@@ -263,7 +273,11 @@ public final class TransportVehicle extends PathfinderMob {
             if(latchedRoute<0&&l.getBlockEntity(node) instanceof LogicConveyorEntity logic){int selected=logic.route(power);if(selected==3){traveling=false;status="Logic conveyor holding";return 0;}latchedRoute=selected;}
             turn=latchedRoute==1?-1:latchedRoute==2?1:0;
         }
-        Direction entry=state.getValue(GuidewayBlock.FACING);
+        Direction entry=way.junction()?heading:state.getValue(GuidewayBlock.FACING);
+        if(way.junction()){
+            turn=ConveyorJunction.turn(state.getValue(GuidewayBlock.FACING),state.getValue(GuidewayBlock.OUTLET),entry);
+            if(turn==-2){running=false;traveling=false;status="Wrong-way T-junction — change its output";return 0;}
+        }
         Direction out=turn<0?entry.getCounterClockWise():turn>0?entry.getClockWise():entry;
         BlockPos next=node.relative(out,3).above(way.rise());
         target=next; // Also allow the front of a pallet to enter the next deck before its center crosses the module boundary.
@@ -289,10 +303,13 @@ public final class TransportVehicle extends PathfinderMob {
                 running=false;traveling=false;status="End of route — stopped";return distance;
             }
             var ns=l.getBlockState(next);var nw=(GuidewayBlock)ns.getBlock();
-            if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){
+            boolean enters=nw.junction()?
+                ConveyorJunction.accepts(ns.getValue(GuidewayBlock.FACING),ns.getValue(GuidewayBlock.OUTLET),out):
+                ns.getValue(GuidewayBlock.FACING)==out;
+            if(nw.rail()!=(kind()!=0)||nw.bay()||!enters){
                 running=false;traveling=false;status="Incompatible guideway — stopped";return distance;
             }
-            previousNode=node;node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;
+            previousNode=node;node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;heading=out;
         }
         return distance;
     }
@@ -457,12 +474,16 @@ public final class TransportVehicle extends PathfinderMob {
         super.die(cause);
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
-        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
+        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.putString("guide_heading",heading.getName());out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
         out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
     @Override protected void readAdditionalSaveData(ValueInput in){
         super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);previousNode=in.read("previous_node",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
+        var current=level().getBlockState(node);
+        heading=current.hasProperty(GuidewayBlock.FACING)?current.getValue(GuidewayBlock.FACING):Direction.NORTH;
+        String savedHeading=in.getStringOr("guide_heading",heading.getName());
+        for(Direction d:Direction.Plane.HORIZONTAL)if(d.getName().equals(savedHeading)){heading=d;break;}
         awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
         trail.clear();var saved=in.read("trail",Vec3.CODEC.listOf()).orElse(List.of());trail.addAll(saved.subList(Math.max(0,saved.size()-400),saved.size()));for(int i=0;i<3;i++)cargo[i].load(in,i);sync();setNoGravity(true);
     }
