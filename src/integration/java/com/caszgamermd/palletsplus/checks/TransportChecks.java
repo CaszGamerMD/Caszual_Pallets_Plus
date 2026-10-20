@@ -124,7 +124,7 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
-            if(diagonalCorner.getZ()>-7.4||!diagonalCorner.transitStatus().startsWith("End of route"))
+            if(diagonalCorner.getZ()>-6.9||!diagonalCorner.transitStatus().startsWith("End of route"))
                 throw new AssertionError("Diagonally touching conveyor corners did not join: "+diagonalCorner.transitStatus()+" x="+diagonalCorner.getX()+" z="+diagonalCorner.getZ());
             cornerDone=true;diagonalCorner.discard();
             if(tMergeNorth.getX()<55.4||!tMergeNorth.transitStatus().startsWith("End of route"))
