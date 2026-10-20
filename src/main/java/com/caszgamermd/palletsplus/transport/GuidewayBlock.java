@@ -32,6 +32,10 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     public boolean junction(){return kind.equals("conveyor_t_junction");}
     public boolean rail(){return kind.startsWith("pallet_rail");}
     public boolean bay(){return kind.equals("drone_parking_bay");}
+    @Override protected boolean isSignalSource(BlockState state){return bay();}
+    @Override protected int getSignal(BlockState state,BlockGetter level,BlockPos pos,Direction direction){
+        return bay()&&state.getValue(POWERED)?15:0;
+    }
     public int rise(){return kind.endsWith("_up")?1:kind.endsWith("_down")?-1:0;}
     public Direction exit(Direction entry){return kind.endsWith("_left")?entry.getCounterClockWise():kind.endsWith("_right")?entry.getClockWise():entry;}
     public static boolean complete(Level l,BlockPos p){
