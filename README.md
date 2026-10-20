@@ -10,7 +10,7 @@ Caszual Additions continues to own pallets, cargo storage, racks, warehouse comp
 
 ## Installation and existing worlds
 
-Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.2.2.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
+Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.3.0.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
 
 Back up the world before changing mods. Finish active Golem train/conveyor loading jobs before replacing the old combined preview. Existing track, conveyor, vehicle, cargo and transit-data identifiers retain their `caszual_additions:` namespace intentionally, so the extracted addon can read those world objects. They are now registered by Pallets Plus. Pallets Plus has its own creative tab and contributes transport items to the shared Caszual content tag.
 
@@ -54,3 +54,11 @@ Automated tests cover corridor limits, negative chunk coordinates and server-rec
 - Dedicated-server integration now runs two downhill paths with solid blocks below the ramp, including a separate obstructed path to confirm genuine cargo obstacles still stop it safely.
 
 **Note:** This is a transport collision fix, not a change to vanilla block collisions or the warehouse's own pallet collision system. Existing conveyor blocks and pallet cargo need no replacement; back up your world before updating.
+
+## T-junction merging conveyors (0.3.0)
+
+Craft or place **Pallet Conveyor — T-Junction (2 IN / 1 OUT)**. Each complete 3×3 module has a stem, left wing and right wing; the fourth side is closed. Set the intended outlet by empty-hand right-clicking any cell or by using the Conveyor Direction Crank. The center marker updates to show the selected output. The other two sides are automatically the incoming lanes. Sneak-use the crank to rotate the whole three-arm assembly before loading pallets. Switching or rotating is blocked while a pallet occupies the junction.
+
+Pallets from straight conveyor sections or curves entering either inlet merge into the same output; a carrier approaching from the exit or missing fourth side cannot enter. The chosen outlet is stored in block states across saves, and the inbound direction is saved with each traveling pallet. Curves that touch diagonally at their tips can also pass cargo directly between the two corners when their input/output direction agrees; ambiguous double-tip junctions deliberately stop rather than choosing an unintended lane.
+
+The merge has no separate power requirement. At high traffic, pallets safely wait for the transport in front to clear; this is not a priority scheduler. New assets and a recipe are included. The addon continues to require Caszual Additions without duplicating its warehouse/pallet system.

@@ -13,9 +13,9 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner;
     private final List<TransportVehicle> cars=new ArrayList<>();
-    private boolean conveyorSpeed,holdStop,indexed,coupled;
+    private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
     public void onInitialize(){
         if(!Boolean.getBoolean("palletsplus.integration"))return;
@@ -25,6 +25,12 @@ public final class TransportChecks implements ModInitializer {
     private void module(ServerLevel level,BlockPos root,String name){
         var block=TransportContent.WAYS.get(name);
         for(int part=0;part<9;part++)level.setBlock(GuidewayBlock.cell(root,Direction.NORTH,part),block.defaultBlockState().setValue(GuidewayBlock.FACING,Direction.NORTH).setValue(GuidewayBlock.PART,part),2);
+    }
+    private void moduleFacing(ServerLevel level,BlockPos root,String name,Direction facing){
+        var block=TransportContent.WAYS.get(name);
+        for(int part=0;part<9;part++)
+            level.setBlock(GuidewayBlock.cell(root,facing,part),
+                block.defaultBlockState().setValue(GuidewayBlock.FACING,facing).setValue(GuidewayBlock.PART,part),2);
     }
     private TransportVehicle vehicle(ServerLevel level,int kind,int x,int z,double exactZ){
         var entity=TransportContent.VEHICLE.create(level,EntitySpawnReason.EVENT);
@@ -53,6 +59,25 @@ public final class TransportChecks implements ModInitializer {
         }
         level.setBlock(new BlockPos(28,64,-4),Blocks.STONE.defaultBlockState(),2);
         level.setBlock(new BlockPos(26,64,-12),Blocks.REDSTONE_BLOCK.defaultBlockState(),3);
+        // The north inlet is fed through a real 90-degree corner; the
+        // west inlet is straight. Both must feed the user-selected east OUT.
+        for(int x=2;x<=4;x++)for(int z=-1;z<=1;z++){
+            level.setChunkForced(x,z,true);level.getChunk(x,z);
+        }
+        moduleFacing(level,new BlockPos(45,64,-3),"conveyor_straight",Direction.EAST);
+        moduleFacing(level,new BlockPos(48,64,-3),"conveyor_right",Direction.EAST);
+        moduleFacing(level,new BlockPos(45,64,0),"conveyor_straight",Direction.EAST);
+        BlockPos tRoot=new BlockPos(48,64,0);
+        moduleFacing(level,tRoot,"conveyor_t_junction",Direction.NORTH);
+        String selected=GuidewayBlock.cycleJunction(level,tRoot);
+        if(!selected.contains("EAST"))throw new AssertionError("Could not set east T-junction output: "+selected);
+        moduleFacing(level,new BlockPos(51,64,0),"conveyor_straight",Direction.EAST);
+        moduleFacing(level,new BlockPos(54,64,0),"conveyor_straight",Direction.EAST);
+        // A curve physically touches another curve by exactly one corner:
+        // east-facing exit, diagonal north-east entry, then northbound exit.
+        moduleFacing(level,new BlockPos(60,64,0),"conveyor_right",Direction.NORTH);
+        moduleFacing(level,new BlockPos(63,64,-3),"conveyor_left",Direction.EAST);
+        moduleFacing(level,new BlockPos(63,64,-6),"conveyor_straight",Direction.NORTH);
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -67,6 +92,10 @@ public final class TransportChecks implements ModInitializer {
         endOfLine=vehicle(level,0,16,0,.5);
         supportedRamp=vehicle(level,0,20,0,.5);supportedRamp.setPos(20.5,63.76,.5);
         blockedRamp=vehicle(level,0,28,0,.5);blockedRamp.setPos(28.5,63.76,.5);
+        tMergeNorth=vehicle(level,0,45,-3,-2.5);tMergeNorth.setPos(45.5,64.26,-2.5);
+        diagonalCorner=vehicle(level,0,60,0,.5);
+        var startCorner=TransportPath.sample(1,0,0,.5);
+        diagonalCorner.setPos(60.5+startCorner.x(),64+startCorner.y(),.5+startCorner.z());
         // Defer coupling until the first server tick: addFreshEntity() has queued UUID
         // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
@@ -95,6 +124,13 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
+            if(diagonalCorner.getZ()>-6.9||!diagonalCorner.transitStatus().startsWith("End of route"))
+                throw new AssertionError("Diagonally touching conveyor corners did not join: "+diagonalCorner.transitStatus()+" x="+diagonalCorner.getX()+" z="+diagonalCorner.getZ());
+            cornerDone=true;diagonalCorner.discard();
+            if(tMergeNorth.getX()<55.4||!tMergeNorth.transitStatus().startsWith("End of route"))
+                throw new AssertionError("T merge from corner-fed north inlet failed: "+tMergeNorth.transitStatus()+" x="+tMergeNorth.getX()+" z="+tMergeNorth.getZ());
+            tNorthDone=true;tMergeNorth.discard();
+            tMergeWest=vehicle(server.overworld(),0,45,0,.5);
             if(supportedRamp.getZ()>-3.5 || !supportedRamp.transitStatus().startsWith("End of route"))
                 throw new AssertionError("Supported downhill conveyor jammed: "+supportedRamp.transitStatus()+" at z="+supportedRamp.getZ()+", y="+supportedRamp.getY());
             if(!blockedRamp.transitStatus().equals("Obstructed"))
@@ -103,6 +139,11 @@ public final class TransportChecks implements ModInitializer {
             var endRecord=TransitWorldData.get(server.overworld()).vehicles.get(endOfLine.getStringUUID());
             if(endRecord==null||endRecord.get("active").getAsBoolean()||!endOfLine.transitStatus().startsWith("End of route"))
                 throw new AssertionError("Broken conveyor end must safely stop and release chunk tickets");
+        }
+        if(conveyor.tickCount==100){
+            if(tMergeWest==null||tMergeWest.getX()<55.4||!tMergeWest.transitStatus().startsWith("End of route"))
+                throw new AssertionError("T merge from west inlet failed: "+(tMergeWest==null?"missing":tMergeWest.transitStatus()+" x="+tMergeWest.getX()+" z="+tMergeWest.getZ()));
+            tWestDone=true;tMergeWest.discard();
         }
         if(moveTicks==100){
             near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
@@ -125,8 +166,8 @@ public final class TransportChecks implements ModInitializer {
             var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
-            if(!conveyorSpeed||!holdStop||!indexed)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction");
+            if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer");
             engine=null;server.halt(false);
         }
     }

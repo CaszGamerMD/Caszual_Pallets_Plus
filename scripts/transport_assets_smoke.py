@@ -14,7 +14,7 @@ for p in models.glob('*.json'):
         if 'rotation' in element:
             assert element['rotation']['angle'] in (-45,-22.5,0,22.5,45),p
             assert element['rotation']['axis']=='y',p
-names=['conveyor_hold','conveyor_logic','conveyor_straight','conveyor_left','conveyor_right','conveyor_up','conveyor_down','pallet_rail','pallet_rail_index','pallet_rail_left','pallet_rail_right','drone_parking_bay']
+names=['conveyor_hold','conveyor_logic','conveyor_straight','conveyor_left','conveyor_right','conveyor_t_junction','conveyor_up','conveyor_down','pallet_rail','pallet_rail_index','pallet_rail_left','pallet_rail_right','drone_parking_bay']
 recipes=set()
 for name in names+['train_station_post','pallet_pressure_plate','pallet_transit_computer','pallet_engine','pallet_car','passenger_car','pallet_drone','transport_controller','conveyor_crank']:
     item=json.loads((assets/f'items/{name}.json').read_text())
@@ -25,6 +25,6 @@ for name in names+['train_station_post','pallet_pressure_plate','pallet_transit_
     recipes.add(signature)
 for name in names:
     states=json.loads((assets/f'blockstates/{name}.json').read_text())['variants']
-    assert len(states)==(72 if name=="conveyor_hold" else 36),name
+    assert len(states)==(72 if name=="conveyor_hold" else 108 if name=="conveyor_t_junction" else 36),name
     for variant in states.values():assert (assets/('models/'+variant['model'].split(':')[1]+'.json')).exists(),name
 print('Transport assets: model bounds, 36-state modules, item references and unique recipes passed.')

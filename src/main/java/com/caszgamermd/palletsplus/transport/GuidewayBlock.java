@@ -20,13 +20,16 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     public static final EnumProperty<Direction> FACING=BlockStateProperties.HORIZONTAL_FACING;
     public static final BooleanProperty POWERED=BlockStateProperties.POWERED;
     public static final IntegerProperty PART=IntegerProperty.create("part",0,8);
+    /** Only T-junctions use nonzero values; persisted on all nine cells. */
+    public static final IntegerProperty OUTLET=IntegerProperty.create("outlet",0,2);
     public final String kind;
     private boolean removing;
-    public GuidewayBlock(String kind,Properties properties){super(properties);this.kind=kind;registerDefaultState(stateDefinition.any().setValue(FACING,Direction.NORTH).setValue(PART,4).setValue(POWERED,false));}
+    public GuidewayBlock(String kind,Properties properties){super(properties);this.kind=kind;registerDefaultState(stateDefinition.any().setValue(FACING,Direction.NORTH).setValue(PART,4).setValue(POWERED,false).setValue(OUTLET,0));}
     @Override protected MapCodec<? extends Block> codec(){return MapCodec.unit(this);}
-    @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> b){b.add(FACING,PART,POWERED);}
+    @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> b){b.add(FACING,PART,POWERED,OUTLET);}
     public static BlockPos cell(BlockPos root,Direction facing,int part){return root.relative(facing.getClockWise(),part%3-1).relative(facing,1-part/3);}
     public static BlockPos root(BlockPos pos,BlockState s){return pos.relative(s.getValue(FACING).getClockWise(),1-s.getValue(PART)%3).relative(s.getValue(FACING),s.getValue(PART)/3-1);}
+    public boolean junction(){return kind.equals("conveyor_t_junction");}
     public boolean rail(){return kind.startsWith("pallet_rail");}
     public boolean bay(){return kind.equals("drone_parking_bay");}
     public int rise(){return kind.endsWith("_up")?1:kind.endsWith("_down")?-1:0;}
@@ -39,7 +42,8 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             BlockPos c=cell(p,s.getValue(FACING),i);
             if(!l.hasChunkAt(c))return false;
             BlockState a=l.getBlockState(c);
-            if(a.getBlock()!=s.getBlock()||a.getValue(PART)!=i||a.getValue(FACING)!=s.getValue(FACING))return false;
+            if(a.getBlock()!=s.getBlock()||a.getValue(PART)!=i||a.getValue(FACING)!=s.getValue(FACING)||
+                (s.getBlock() instanceof GuidewayBlock way&&way.junction()&&a.getValue(OUTLET)!=s.getValue(OUTLET)))return false;
         }return true;
     }
     @Override public BlockState getStateForPlacement(BlockPlaceContext c){
@@ -72,7 +76,30 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             if(engine.indexedAt(root)){result=engine.advanceOneCar();break;}
         if(player!=null)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(result));
     }
+    public static boolean busy(ServerLevel level,BlockPos root){
+        return !level.getEntitiesOfClass(TransportVehicle.class,new net.minecraft.world.phys.AABB(root).inflate(3,3,3)).isEmpty();
+    }
+    /** Changes one persistent outlet without dismantling or rotating the 3x3 footprint. */
+    public static String cycleJunction(ServerLevel l,BlockPos root){
+        if(!complete(l,root))return "Finish the T-junction first.";
+        BlockState center=l.getBlockState(root);
+        if(!(center.getBlock() instanceof GuidewayBlock block)||!block.junction())return "Not a T-junction.";
+        if(busy(l,root))return "Wait until all pallets clear the junction before switching.";
+        int selected=(center.getValue(OUTLET)+1)%3;
+        Direction stem=center.getValue(FACING);
+        for(int i=0;i<9;i++){
+            BlockPos cell=cell(root,stem,i);
+            BlockState current=l.getBlockState(cell);
+            l.setBlock(cell,current.setValue(OUTLET,selected),2);
+        }
+        return "T-junction OUT: "+ConveyorJunction.port(stem,selected).getName().toUpperCase(java.util.Locale.ROOT)+
+            " — the other two arms are inputs.";
+    }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
+        if(junction()){
+            if(l instanceof ServerLevel server)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(cycleJunction(server,root(p,s))));
+            return net.minecraft.world.InteractionResult.SUCCESS;
+        }
         if(kind.equals("pallet_rail_index")){
             if(l instanceof ServerLevel server)advanceIndex(server,root(p,s),player);
             return net.minecraft.world.InteractionResult.SUCCESS;
