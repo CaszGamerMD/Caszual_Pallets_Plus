@@ -42,7 +42,8 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             BlockPos c=cell(p,s.getValue(FACING),i);
             if(!l.hasChunkAt(c))return false;
             BlockState a=l.getBlockState(c);
-            if(a.getBlock()!=s.getBlock()||a.getValue(PART)!=i||a.getValue(FACING)!=s.getValue(FACING))return false;
+            if(a.getBlock()!=s.getBlock()||a.getValue(PART)!=i||a.getValue(FACING)!=s.getValue(FACING)||
+                (s.getBlock() instanceof GuidewayBlock way&&way.junction()&&a.getValue(OUTLET)!=s.getValue(OUTLET)))return false;
         }return true;
     }
     @Override public BlockState getStateForPlacement(BlockPlaceContext c){
