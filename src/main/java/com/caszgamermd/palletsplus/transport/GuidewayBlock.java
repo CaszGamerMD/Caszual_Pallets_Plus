@@ -96,6 +96,11 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             " — the other two arms are inputs.";
     }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
+        if(bay()){
+            if(l instanceof ServerLevel server)
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(DroneBayRoutes.mode(server,root(p,s))));
+            return net.minecraft.world.InteractionResult.SUCCESS;
+        }
         if(junction()){
             if(l instanceof ServerLevel server)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(cycleJunction(server,root(p,s))));
             return net.minecraft.world.InteractionResult.SUCCESS;
