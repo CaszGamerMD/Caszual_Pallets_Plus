@@ -16,7 +16,7 @@ for p in models.glob('*.json'):
             assert element['rotation']['axis']=='y',p
 names=['conveyor_hold','conveyor_logic','conveyor_straight','conveyor_left','conveyor_right','conveyor_t_junction','conveyor_up','conveyor_down','pallet_rail','pallet_rail_index','pallet_rail_left','pallet_rail_right','drone_parking_bay']
 recipes=set()
-for name in names+['train_station_post','pallet_pressure_plate','pallet_transit_computer','pallet_engine','pallet_car','passenger_car','pallet_drone','transport_controller','conveyor_crank']:
+for name in names+['train_station_post','pallet_pressure_plate','pallet_transit_computer','pallet_engine','pallet_car','passenger_car','pallet_drone' ,'transport_controller','conveyor_crank','parking_bay_link']:
     item=json.loads((assets/f'items/{name}.json').read_text())
     assert (assets/('models/'+item['model']['model'].split(':')[1]+'.json')).exists(),name
     recipe=json.loads((root/f'data/caszual_additions/recipe/{name}.json').read_text())
