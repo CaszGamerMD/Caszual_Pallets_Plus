@@ -32,7 +32,7 @@ public final class TransportContent {
         STATION=block("train_station_post",StationPostBlock::new);
         PLATE=block("pallet_pressure_plate",PalletPlateBlock::new);
         COMPUTER=block("pallet_transit_computer",TransitComputerBlock::new);
-        DroneChunkLoading.initialize();TransitNet.initialize();
+        DroneChunkLoading.initialize();DroneBayAutomation.initialize();TransitNet.initialize();
         var bayKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("drone_parking_bay"));
         BAY=Registry.register(BuiltInRegistries.BLOCK,bayKey,new GuidewayBlock("drone_parking_bay",BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(4).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().setId(bayKey)));
         var bik=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("drone_parking_bay"));
