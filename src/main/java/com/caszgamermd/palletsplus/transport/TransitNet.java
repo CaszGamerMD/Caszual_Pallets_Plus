@@ -62,7 +62,7 @@ public final class TransitNet {
             JsonObject s=it.next().getValue();BlockPos pos=new BlockPos(s.get("x").getAsInt(),s.get("y").getAsInt(),s.get("z").getAsInt());
             if(l.hasChunkAt(pos)&&!l.getBlockState(pos).is(s.get("kind").getAsString().equals("bay")?TransportContent.BAY:TransportContent.STATION)){it.remove();data.setDirty();continue;}
             if(stations.size()<512&&Math.abs(pos.getX()-cx)<scale*32.0&&Math.abs(pos.getZ()-cz)<scale*32.0)stations.add(s);
-        }out.add("stations",stations);ServerPlayNetworking.send(player,new Snapshot(p,out.toString()));
+        }out.add("stations",stations);out.add("bayLinks",DroneBayRoutes.links(l));ServerPlayNetworking.send(player,new Snapshot(p,out.toString()));
     }
     private TransitNet(){}
 }
