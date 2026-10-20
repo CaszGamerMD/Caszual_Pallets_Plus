@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -31,6 +31,13 @@ public final class TransportChecks implements ModInitializer {
         for(int part=0;part<9;part++)
             level.setBlock(GuidewayBlock.cell(root,facing,part),
                 block.defaultBlockState().setValue(GuidewayBlock.FACING,facing).setValue(GuidewayBlock.PART,part),2);
+    }
+    private void bay(ServerLevel level,BlockPos center){
+        var block=TransportContent.BAY;
+        for(int part=0;part<9;part++)
+            level.setBlock(GuidewayBlock.cell(center,Direction.NORTH,part),
+                block.defaultBlockState().setValue(GuidewayBlock.FACING,Direction.NORTH).setValue(GuidewayBlock.PART,part),2);
+        TransitWorldData.get(level).station(center,"bay");
     }
     private TransportVehicle vehicle(ServerLevel level,int kind,int x,int z,double exactZ){
         var entity=TransportContent.VEHICLE.create(level,EntitySpawnReason.EVENT);
@@ -93,6 +100,17 @@ public final class TransportChecks implements ModInitializer {
         supportedRamp=vehicle(level,0,20,0,.5);supportedRamp.setPos(20.5,63.76,.5);
         blockedRamp=vehicle(level,0,28,0,.5);blockedRamp.setPos(28.5,63.76,.5);
         tMergeNorth=vehicle(level,0,45,-3,-2.5);tMergeNorth.setPos(45.5,64.26,-2.5);
+        BlockPos send=new BlockPos(12,64,9),receive=new BlockPos(12,64,-9);
+        bay(level,send);bay(level,receive);
+        String mode=DroneBayRoutes.mode(level,receive);
+        if(!mode.contains("INPUT"))throw new AssertionError("Input bay configuration: "+mode);
+        String linked=DroneBayRoutes.link(level,send,receive);
+        if(!linked.startsWith("Air route linked"))throw new AssertionError(linked);
+        drone=vehicle(level,4,12,9,9.5);
+        drone.cargo[0].deck=new net.minecraft.world.item.ItemStack(Blocks.CHEST.asItem());
+        drone.sync();
+        drone.tickAutomatedBay(level,send,receive);
+        if(!drone.flightActive())throw new AssertionError("Loaded automated drone did not depart from OUTPUT bay.");
         diagonalCorner=vehicle(level,0,60,0,.5);
         var startCorner=TransportPath.sample(1,0,0,.5);
         diagonalCorner.setPos(60.5+startCorner.x(),64+startCorner.y(),.5+startCorner.z());
@@ -146,6 +164,9 @@ public final class TransportChecks implements ModInitializer {
             tWestDone=true;tMergeWest.discard();
         }
         if(moveTicks==100){
+            if(drone.getY()<75||drone.getZ()>-4||!drone.flightActive())
+                throw new AssertionError("Auto-routed drone did not climb and cross to INPUT: "+drone.transitStatus()+
+                    " xyz="+drone.position());
             near(.5-engine.getZ(),37.875,"Engine acceleration with ten cars (status: "+engine.transitStatus()+", engineZ: "+engine.getZ()+", carZ: "+cars.get(1).getZ()+")");
             var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
             if(record==null||!record.get("active").getAsBoolean())
@@ -167,7 +188,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff");
             engine=null;server.halt(false);
         }
     }
