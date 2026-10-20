@@ -10,7 +10,7 @@ Caszual Additions continues to own pallets, cargo storage, racks, warehouse comp
 
 ## Installation and existing worlds
 
-Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.3.0.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
+Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.4.0.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
 
 Back up the world before changing mods. Finish active Golem train/conveyor loading jobs before replacing the old combined preview. Existing track, conveyor, vehicle, cargo and transit-data identifiers retain their `caszual_additions:` namespace intentionally, so the extracted addon can read those world objects. They are now registered by Pallets Plus. Pallets Plus has its own creative tab and contributes transport items to the shared Caszual content tag.
 
@@ -62,3 +62,11 @@ Craft or place **Pallet Conveyor — T-Junction (2 IN / 1 OUT)**. Each complete 
 Pallets from straight conveyor sections or curves entering either inlet merge into the same output; a carrier approaching from the exit or missing fourth side cannot enter. The chosen outlet is stored in block states across saves, and the inbound direction is saved with each traveling pallet. Curves that touch diagonally at their tips can also pass cargo directly between the two corners when their input/output direction agrees; ambiguous double-tip junctions deliberately stop rather than choosing an unintended lane.
 
 The merge has no separate power requirement. At high traffic, pallets safely wait for the transport in front to clear; this is not a priority scheduler. New assets and a recipe are included. The addon continues to require Caszual Additions without duplicating its warehouse/pallet system.
+
+## Drone Parking Bay network (0.4.0 preview)
+
+Empty-hand click a complete 3x3 Drone Parking Bay to change INPUT/OUTPUT. Craft the **Parking Bay Link** tool: click OUTPUT bay, then INPUT bay to create a one-way route. To connect a bay to a warehouse, click the Rack Computer with the same tool, then click that bay (both within 128 blocks). Sneak-use the tool to clear its selection. Links, roles, owner and warehouse position persist in the world, and INPUT/OUTPUT bay links are shown on the Pallet Transit Computer.
+
+A drone placed at an OUTPUT bay adopts its linked INPUT route. It takes off as soon as it physically lifts a wrapped pallet staged beside the OUTPUT bay; no player start click is necessary. It flies over terrain with a bounded vertical climb/descent, aiming 20–40 blocks above the sampled ground. A blocked landing bay makes it hover instead of colliding or dropping cargo. The descent is limited to 0.12 blocks/tick and auto-deliveries return the empty drone to the OUTPUT bay after physically placing their shipment at the receiver.
+
+A linked warehouse receives a one-time redstone notification pulse on an empty OUTPUT bay (requesting an Output Aisle pallet) and on a delivered INPUT pallet (requesting a four-Golem remote pickup into its warehouse rack/PTP). Input remote dispatch uses the existing Caszual Additions dispatcher when the owner who linked the warehouse is online and the warehouse can spare a full crew and an empty exchange pallet. No virtual pallet cloning or teleporting is used. If a warehouse has no compatible automated output-aisle crew handoff, it must physically stage a wrapped pallet next to the OUTPUT bay; the request remains visible on the Transit Computer until staged. Golems, supplies, connected warehouses, unload clearances and the world path all still need gameplay testing with the installed Additions build.
