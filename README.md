@@ -10,7 +10,7 @@ Caszual Additions continues to own pallets, cargo storage, racks, warehouse comp
 
 ## Installation and existing worlds
 
-Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.2.1.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
+Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.2.2.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
 
 Back up the world before changing mods. Finish active Golem train/conveyor loading jobs before replacing the old combined preview. Existing track, conveyor, vehicle, cargo and transit-data identifiers retain their `caszual_additions:` namespace intentionally, so the extracted addon can read those world objects. They are now registered by Pallets Plus. Pallets Plus has its own creative tab and contributes transport items to the shared Caszual content tag.
 
@@ -45,3 +45,12 @@ Back up existing worlds before trying the new movement behavior. Compilation, au
 - Existing train, conveyor, drone and pallet IDs are unchanged. Back up existing saves, then replace the previous addon JAR; do not install both versions.
 
 Automated tests cover corridor limits, negative chunk coordinates and server-record activation/release. Client-side render checks and long-distance multiplayer/world-reload gameplay should still be performed before considering this a stable release.
+
+## Conveyor ramp support collision fix (0.2.2)
+
+- A pallet on a downhill conveyor no longer collides with its own ramp deck (whose lowered geometry extends below the nominal block) or ordinary full-height support blocks placed directly below the conveyor.
+- The collision exception applies only to the active current/previous/next conveyor modules and their immediate support blocks; overhead walls, machinery, and protruding support shapes such as fences remain solid barriers.
+- Route progress and the previous module are saved so restarting during a transition does not make the pallet collide with the ramp it just left.
+- Dedicated-server integration now runs two downhill paths with solid blocks below the ramp, including a separate obstructed path to confirm genuine cargo obstacles still stop it safely.
+
+**Note:** This is a transport collision fix, not a change to vanilla block collisions or the warehouse's own pallet collision system. Existing conveyor blocks and pallet cargo need no replacement; back up your world before updating.
