@@ -22,7 +22,7 @@ public final class TransportVehicle extends PathfinderMob {
     private static final EntityDataAccessor<ItemStack> DECK2=SynchedEntityData.defineId(TransportVehicle.class,EntityDataSerializers.ITEM_STACK);
     private static final EntityDataAccessor<Integer> LOAD=SynchedEntityData.defineId(TransportVehicle.class,EntityDataSerializers.INT);
     public final PalletCargo[] cargo={new PalletCargo(),new PalletCargo(),new PalletCargo()};
-    private BlockPos node=BlockPos.ZERO,target=BlockPos.ZERO,home=BlockPos.ZERO,destination=BlockPos.ZERO;
+    private BlockPos node=BlockPos.ZERO,target=BlockPos.ZERO,previousNode=BlockPos.ZERO,home=BlockPos.ZERO,destination=BlockPos.ZERO;
     private Direction heading=Direction.NORTH;
     private boolean running,traveling,linkedBay,returning,dropsReleased,awaitingBayUnload;
     private int flightStage,latchedRoute=-1;
@@ -53,7 +53,7 @@ public final class TransportVehicle extends PathfinderMob {
     public int visible(int i){return (entityData.get(LOAD)>>(i*5))&31;}
     public void sync(){entityData.set(DECK0,cargo[0].deck.copy());entityData.set(DECK1,cargo[1].deck.copy());entityData.set(DECK2,cargo[2].deck.copy());int n=0;for(int i=0;i<3;i++)n|=cargo[i].visible()<<(i*5);entityData.set(LOAD,n);if(level() instanceof ServerLevel l)TransitWorldData.get(l).record(this);}
     public void configure(int kind,BlockPos p,Direction d){
-        entityData.set(KIND,kind);node=p;target=p;home=p;heading=d;
+        entityData.set(KIND,kind);node=p;target=p;previousNode=p;home=p;heading=d;
         setYRot(d.toYRot());setYBodyRot(getYRot());running=kind==0;
         double x=0,y=.26,z=0;
         var state=level().getBlockState(p);
@@ -266,6 +266,7 @@ public final class TransportVehicle extends PathfinderMob {
         Direction entry=state.getValue(GuidewayBlock.FACING);
         Direction out=turn<0?entry.getCounterClockWise():turn>0?entry.getClockWise():entry;
         BlockPos next=node.relative(out,3).above(way.rise());
+        target=next; // Also allow the front of a pallet to enter the next deck before its center crosses the module boundary.
         double length=TransportPath.length(turn,way.rise()),limit=(indexStop||stationStop||hold)&&progress<.5?.5:1;
         double distance=TransportMotion.distance(budget,(limit-progress)*length);
         if(indexRemaining>0)distance=Math.min(distance,indexRemaining);
@@ -291,7 +292,7 @@ public final class TransportVehicle extends PathfinderMob {
             if(nw.rail()!=(kind()!=0)||nw.bay()||ns.getValue(GuidewayBlock.FACING)!=out){
                 running=false;traveling=false;status="Incompatible guideway — stopped";return distance;
             }
-            node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;
+            previousNode=node;node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;
         }
         return distance;
     }
@@ -342,12 +343,24 @@ public final class TransportVehicle extends PathfinderMob {
         AABB next=new AABB(getX()-ex,getY(),getZ()-ez,getX()+ex,getY()+2.8,getZ()+ez).move(change).minmax(getBoundingBox());
         BlockPos min=BlockPos.containing(next.minX,next.minY,next.minZ),max=BlockPos.containing(next.maxX,next.maxY,next.maxZ);
         if(l.isOutsideBuildHeight(min)||l.isOutsideBuildHeight(max)||!l.hasChunksAt(min,max)||!l.getWorldBorder().isWithinBounds(min)||!l.getWorldBorder().isWithinBounds(max)){status="Waiting for loaded route";return false;}
-        // Guideways form the supporting floor; all other collision must remain clear.
+        // Conveyors include lowered geometry on down ramps. The moving pallet
+        // is guided by the current, previous and upcoming deck, so none of
+        // those deck shapes may collide with the pallet's swept bounding box.
+        // Solid blocks directly underneath those decks support the conveyor
+        // rather than forming an obstacle; never exempt tall protrusions.
         for(BlockPos p:BlockPos.betweenClosed(min,max)){
             var s=l.getBlockState(p);
-            if(s.getBlock() instanceof GuidewayBlock&&p.getY()<=getY()+.5)continue;
+            if(s.getBlock() instanceof GuidewayBlock way){
+                if(kind()==0&&!way.rail()&&!way.bay()){
+                    BlockPos root=GuidewayBlock.root(p,s);
+                    if(root.equals(node)||root.equals(previousNode)||root.equals(target))continue;
+                }
+                if(p.getY()<=getY()+.5)continue;
+            }
             var shape=s.getCollisionShape(l,p);
-            if(!shape.isEmpty()&&shape.toAabbs().stream().anyMatch(b->b.move(p).intersects(next))){status="Obstructed";return false;}
+            if(shape.isEmpty())continue;
+            if(kind()==0&&conveyorSupport(l,p,shape))continue;
+            if(shape.toAabbs().stream().anyMatch(b->b.move(p).intersects(next))){status="Obstructed";return false;}
         }
         for(TransportVehicle other:l.getEntitiesOfClass(TransportVehicle.class,next)){
             if(other==this||(kind()>=1&&kind()<=3&&sameTrain(other)))continue;
@@ -356,6 +369,17 @@ public final class TransportVehicle extends PathfinderMob {
         setPos(getX()+change.x,getY()+change.y,getZ()+change.z);
         if(change.horizontalDistanceSqr()>.00001){setYRot((float)Math.toDegrees(Math.atan2(-change.x,change.z)));setYBodyRot(getYRot());}
         lastMoveTick=tickCount;record();status="Moving";return distance<=speed;
+    }
+    /** A full block directly below an active conveyor deck is its support,
+     * not a barrier. Fences and other shapes protruding above the support
+     * block's top still collide normally with the cargo. */
+    private boolean conveyorSupport(ServerLevel l,BlockPos p,net.minecraft.world.phys.shapes.VoxelShape shape){
+        BlockPos above=p.above();
+        var deck=l.getBlockState(above);
+        if(!(deck.getBlock() instanceof GuidewayBlock way)||way.rail()||way.bay())return false;
+        BlockPos root=GuidewayBlock.root(above,deck);
+        if(!root.equals(node)&&!root.equals(previousNode)&&!root.equals(target))return false;
+        return shape.toAabbs().stream().allMatch(part->part.maxY<=1.00001);
     }
     /** Dock transfer uses real pallet blocks beside the bay, never loose item drops. */
     private boolean serviceBay(ServerLevel l,boolean pickup){
@@ -433,12 +457,12 @@ public final class TransportVehicle extends PathfinderMob {
         super.die(cause);
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
-        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
+        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
         out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
     @Override protected void readAdditionalSaveData(ValueInput in){
-        super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
+        super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);previousNode=in.read("previous_node",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
         awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
         trail.clear();var saved=in.read("trail",Vec3.CODEC.listOf()).orElse(List.of());trail.addAll(saved.subList(Math.max(0,saved.size()-400),saved.size()));for(int i=0;i<3;i++)cargo[i].load(in,i);sync();setNoGravity(true);
     }

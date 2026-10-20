@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -39,6 +39,19 @@ public final class TransportChecks implements ModInitializer {
         for(int z=84;z>=-210;z-=3)module(level,new BlockPos(8,64,z),z==-150?"pallet_rail_index":"pallet_rail");
         for(int z=0;z>=-36;z-=3)module(level,new BlockPos(24,64,z),z==-12?"conveyor_hold":"conveyor_straight");
         module(level,new BlockPos(16,64,0),"conveyor_straight");
+        // Realistic downhill installation: solid ground directly under the
+        // high ramp and its lower exit, plus a separate lane with an actual
+        // obstacle ABOVE the receiving conveyor.
+        for(int x:new int[]{20,28}){
+            BlockPos high=new BlockPos(x,64,0),low=new BlockPos(x,63,-3);
+            module(level,high,"conveyor_down");
+            module(level,low,"conveyor_straight");
+            for(int part=0;part<9;part++){
+                level.setBlock(GuidewayBlock.cell(high,Direction.NORTH,part).below(),Blocks.STONE.defaultBlockState(),2);
+                level.setBlock(GuidewayBlock.cell(low,Direction.NORTH,part).below(),Blocks.STONE.defaultBlockState(),2);
+            }
+        }
+        level.setBlock(new BlockPos(28,64,-4),Blocks.STONE.defaultBlockState(),2);
         level.setBlock(new BlockPos(26,64,-12),Blocks.REDSTONE_BLOCK.defaultBlockState(),3);
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
@@ -52,6 +65,8 @@ public final class TransportChecks implements ModInitializer {
         extra=vehicle(level,2,8,(int)Math.round((z-.5)/3)*3,z);
         conveyor=vehicle(level,0,24,0,.5);
         endOfLine=vehicle(level,0,16,0,.5);
+        supportedRamp=vehicle(level,0,20,0,.5);supportedRamp.setPos(20.5,63.76,.5);
+        blockedRamp=vehicle(level,0,28,0,.5);blockedRamp.setPos(28.5,63.76,.5);
         // Defer coupling until the first server tick: addFreshEntity() has queued UUID
         // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
@@ -80,6 +95,10 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
+            if(supportedRamp.getZ()>-3.5 || !supportedRamp.transitStatus().startsWith("End of route"))
+                throw new AssertionError("Supported downhill conveyor jammed: "+supportedRamp.transitStatus()+" at z="+supportedRamp.getZ()+", y="+supportedRamp.getY());
+            if(!blockedRamp.transitStatus().equals("Obstructed"))
+                throw new AssertionError("Obstacle above lowered conveyor must still block cargo: "+blockedRamp.transitStatus());
             near(conveyor.getZ(),-11.5,"Hold bar centre stop");holdStop=true;
             var endRecord=TransitWorldData.get(server.overworld()).vehicles.get(endOfLine.getStringUUID());
             if(endRecord==null||endRecord.get("active").getAsBoolean()||!endOfLine.transitStatus().startsWith("End of route"))
@@ -107,7 +126,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction");
             engine=null;server.halt(false);
         }
     }
