@@ -94,6 +94,8 @@ public final class TransportChecks implements ModInitializer {
         blockedRamp=vehicle(level,0,28,0,.5);blockedRamp.setPos(28.5,63.76,.5);
         tMergeNorth=vehicle(level,0,45,-3,-2.5);tMergeNorth.setPos(45.5,64.26,-2.5);
         diagonalCorner=vehicle(level,0,60,0,.5);
+        var startCorner=TransportPath.sample(1,0,0,.5);
+        diagonalCorner.setPos(60.5+startCorner.x(),64+startCorner.y(),.5+startCorner.z());
         // Defer coupling until the first server tick: addFreshEntity() has queued UUID
         // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
