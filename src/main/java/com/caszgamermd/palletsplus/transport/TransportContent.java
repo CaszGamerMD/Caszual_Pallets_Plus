@@ -21,7 +21,7 @@ public final class TransportContent {
     public static Item CONTROLLER;
     public static final String[] VEHICLES={"conveyor_pallet","pallet_engine","pallet_car","passenger_car","pallet_drone"};
     public static void initialize(){
-        for(String name:List.of("conveyor_hold","conveyor_logic","conveyor_straight","conveyor_left","conveyor_right","conveyor_up","conveyor_down","pallet_rail","pallet_rail_index","pallet_rail_left","pallet_rail_right")){
+        for(String name:List.of("conveyor_hold","conveyor_logic","conveyor_straight","conveyor_left","conveyor_right","conveyor_t_junction","conveyor_up","conveyor_down","pallet_rail","pallet_rail_index","pallet_rail_left","pallet_rail_right")){
             var key=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId(name));
             var block=new GuidewayBlock(name,BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(4).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().setId(key));
             Registry.register(BuiltInRegistries.BLOCK,key,block); WAYS.put(name,block);
