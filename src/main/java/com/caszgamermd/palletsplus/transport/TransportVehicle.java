@@ -30,7 +30,9 @@ public final class TransportVehicle extends PathfinderMob {
     private BlockPos stationPassed=NO_STATION;
     private int lastMoveTick=-100;
     private double progress=.5,trainSpeed,indexRemaining=-1;
-    private BlockPos indexRail=NO_STATION;
+    private BlockPos indexRail=NO_STATION,cornerJoin=NO_STATION;
+    private Vec3 cornerFrom=Vec3.ZERO,cornerTo=Vec3.ZERO;
+    private double cornerDistance;
     private int indexedCar;
     private String ahead="",behind="",status="Parked";
     private final Deque<Vec3> trail=new ArrayDeque<>();
@@ -246,6 +248,7 @@ public final class TransportVehicle extends PathfinderMob {
         }
     }
     private double advanceGuideway(ServerLevel l,double budget){
+        if(!cornerJoin.equals(NO_STATION))return advanceCornerJoin(l,budget);
         // Do not treat unloaded chunks as broken tracks: active ticket
         // corridors will bring them back. A genuinely broken module stops
         // renewing tickets rather than loading this area indefinitely.
@@ -300,6 +303,10 @@ public final class TransportVehicle extends PathfinderMob {
                 traveling=false;status="Waiting for loaded route";return distance;
             }
             if(!GuidewayBlock.complete(l,next)){
+                // Two 90-degree corner modules can meet at a diagonal tip,
+                // without occupying a shared straight module. A short
+                // guided seam follows the edge to the next corner's inlet.
+                if(kind()==0&&startCornerJoin(l,way,out))return distance;
                 running=false;traveling=false;status="End of route — stopped";return distance;
             }
             var ns=l.getBlockState(next);var nw=(GuidewayBlock)ns.getBlock();
@@ -310,6 +317,54 @@ public final class TransportVehicle extends PathfinderMob {
                 running=false;traveling=false;status="Incompatible guideway — stopped";return distance;
             }
             previousNode=node;node=next;target=next;progress=0;latchedRoute=-1;stationPassed=NO_STATION;heading=out;
+        }
+        return distance;
+    }
+    /** Only bridge a pair of curved modules (or a T merge) which touch
+     * diagonally; refuse ambiguous junctions rather than guessing a lane. */
+    private boolean startCornerJoin(ServerLevel l,GuidewayBlock from,Direction travel){
+        if(!from.kind.equals("conveyor_left")&&!from.kind.equals("conveyor_right"))return false;
+        BlockPos chosen=null;
+        for(Direction side:new Direction[]{travel.getClockWise(),travel.getCounterClockWise()}){
+            BlockPos corner=node.relative(travel,3).relative(side,3);
+            if(!l.hasChunksAt(corner.offset(-1,0,-1),corner.offset(1,0,1)))continue;
+            if(!GuidewayBlock.complete(l,corner))continue;
+            var state=l.getBlockState(corner);
+            var to=(GuidewayBlock)state.getBlock();
+            boolean curve=to.kind.equals("conveyor_left")||to.kind.equals("conveyor_right");
+            if(!curve&&!to.junction())continue;
+            boolean accepts=to.junction()?
+                ConveyorJunction.accepts(state.getValue(GuidewayBlock.FACING),state.getValue(GuidewayBlock.OUTLET),travel):
+                state.getValue(GuidewayBlock.FACING)==travel;
+            if(!accepts)continue;
+            if(chosen!=null)return false; // Two eligible tips require deliberate rerouting.
+            chosen=corner;
+        }
+        if(chosen==null)return false;
+        cornerJoin=chosen;cornerFrom=position();heading=travel;
+        int rotation=switch(travel){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
+        var p=TransportPath.sample(0,0,rotation,0);
+        cornerTo=new Vec3(chosen.getX()+.5+p.x(),chosen.getY()+p.y(),chosen.getZ()+.5+p.z());
+        cornerDistance=0;target=chosen;status="Joining diagonal conveyor corners";
+        return true;
+    }
+    private double advanceCornerJoin(ServerLevel l,double budget){
+        if(!l.hasChunksAt(cornerJoin.offset(-1,0,-1),cornerJoin.offset(1,0,1))){
+            status="Waiting for loaded corner connector";return 0;
+        }
+        if(!GuidewayBlock.complete(l,cornerJoin)){
+            running=false;traveling=false;status="Corner connector removed — stopped";return 0;
+        }
+        double total=cornerFrom.distanceTo(cornerTo);
+        if(total<1e-7){running=false;status="Invalid corner connector";return 0;}
+        double distance=Math.min(budget,total-cornerDistance);
+        Vec3 next=cornerFrom.lerp(cornerTo,Math.min(1,(cornerDistance+distance)/total));
+        if(!step(l,next,distance+1e-5))return 0;
+        cornerDistance+=distance;
+        if(cornerDistance>=total-1e-7){
+            previousNode=node;node=cornerJoin;target=node;cornerJoin=NO_STATION;
+            // Keep the original approach direction, not the sideways seam's yaw.
+            progress=0;latchedRoute=-1;stationPassed=NO_STATION;cornerDistance=0;
         }
         return distance;
     }
@@ -474,12 +529,12 @@ public final class TransportVehicle extends PathfinderMob {
         super.die(cause);
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
-        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.putString("guide_heading",heading.getName());out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
+        super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("corner_join",BlockPos.CODEC,cornerJoin);out.store("corner_from",Vec3.CODEC,cornerFrom);out.store("corner_to",Vec3.CODEC,cornerTo);out.putDouble("corner_distance",cornerDistance);out.putString("guide_heading",heading.getName());out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
         out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
     @Override protected void readAdditionalSaveData(ValueInput in){
-        super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);previousNode=in.read("previous_node",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
+        super.readAdditionalSaveData(in);trainSpeed=0;indexRemaining=Math.clamp(in.getDoubleOr("index_remaining",-1),-1,16);indexRail=in.read("index_rail",BlockPos.CODEC).orElse(NO_STATION);indexedCar=Math.clamp(in.getIntOr("indexed_car",0),0,TransportMotion.MAX_CARS);status=in.getStringOr("transit_status","Parked");latchedRoute=Math.clamp(in.getIntOr("logic_route",-1),-1,2);cornerJoin=in.read("corner_join",BlockPos.CODEC).orElse(NO_STATION);cornerFrom=in.read("corner_from",Vec3.CODEC).orElse(Vec3.ZERO);cornerTo=in.read("corner_to",Vec3.CODEC).orElse(Vec3.ZERO);cornerDistance=Math.max(0,in.getDoubleOr("corner_distance",0));stationPassed=in.read("station_passed",BlockPos.CODEC).orElse(NO_STATION);entityData.set(KIND,Math.clamp(in.getIntOr("kind",0),0,4));progress=Math.clamp(in.getDoubleOr("progress",.5),0,1);node=in.read("node",BlockPos.CODEC).orElse(blockPosition());target=in.read("target",BlockPos.CODEC).orElse(node);previousNode=in.read("previous_node",BlockPos.CODEC).orElse(node);home=in.read("home",BlockPos.CODEC).orElse(node);destination=in.read("destination",BlockPos.CODEC).orElse(home);
         var current=level().getBlockState(node);
         heading=current.hasProperty(GuidewayBlock.FACING)?current.getValue(GuidewayBlock.FACING):Direction.NORTH;
         String savedHeading=in.getStringOr("guide_heading",heading.getName());
