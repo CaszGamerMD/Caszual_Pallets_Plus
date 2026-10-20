@@ -13,9 +13,9 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner;
     private final List<TransportVehicle> cars=new ArrayList<>();
-    private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone;
+    private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
     public void onInitialize(){
         if(!Boolean.getBoolean("palletsplus.integration"))return;
@@ -73,6 +73,11 @@ public final class TransportChecks implements ModInitializer {
         if(!selected.contains("EAST"))throw new AssertionError("Could not set east T-junction output: "+selected);
         moduleFacing(level,new BlockPos(51,64,0),"conveyor_straight",Direction.EAST);
         moduleFacing(level,new BlockPos(54,64,0),"conveyor_straight",Direction.EAST);
+        // A curve physically touches another curve by exactly one corner:
+        // east-facing exit, diagonal north-east entry, then northbound exit.
+        moduleFacing(level,new BlockPos(60,64,0),"conveyor_right",Direction.NORTH);
+        moduleFacing(level,new BlockPos(63,64,-3),"conveyor_left",Direction.EAST);
+        moduleFacing(level,new BlockPos(63,64,-6),"conveyor_straight",Direction.NORTH);
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -88,6 +93,7 @@ public final class TransportChecks implements ModInitializer {
         supportedRamp=vehicle(level,0,20,0,.5);supportedRamp.setPos(20.5,63.76,.5);
         blockedRamp=vehicle(level,0,28,0,.5);blockedRamp.setPos(28.5,63.76,.5);
         tMergeNorth=vehicle(level,0,45,-3,-2.5);tMergeNorth.setPos(45.5,64.26,-2.5);
+        diagonalCorner=vehicle(level,0,60,0,.5);
         // Defer coupling until the first server tick: addFreshEntity() has queued UUID
         // registration, so a same-tick level.getEntity(uuid) may not find a new car.
     }
@@ -116,6 +122,9 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
+            if(diagonalCorner.getZ()>-7.4||!diagonalCorner.transitStatus().startsWith("End of route"))
+                throw new AssertionError("Diagonally touching conveyor corners did not join: "+diagonalCorner.transitStatus()+" x="+diagonalCorner.getX()+" z="+diagonalCorner.getZ());
+            cornerDone=true;diagonalCorner.discard();
             if(tMergeNorth.getX()<55.4||!tMergeNorth.transitStatus().startsWith("End of route"))
                 throw new AssertionError("T merge from corner-fed north inlet failed: "+tMergeNorth.transitStatus()+" x="+tMergeNorth.getX()+" z="+tMergeNorth.getZ());
             tNorthDone=true;tMergeNorth.discard();
@@ -155,8 +164,8 @@ public final class TransportChecks implements ModInitializer {
             var record=TransitWorldData.get(server.overworld()).vehicles.get(engine.getStringUUID());
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
-            if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge and straight T merge");
+            if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer");
             engine=null;server.halt(false);
         }
     }
