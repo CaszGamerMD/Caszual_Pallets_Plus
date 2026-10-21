@@ -316,11 +316,15 @@ tag=ROOT/'data/caszual_additions/tags/item/caszual_content.json';tag.parent.mkdi
 for name in labels:
  val='caszual_additions:'+name
  if val not in obj['values']:obj['values'].append(val)
+# The original legacy item remains in saves, but the searchable native item
+# uses the same detailed model and is the result of new crafting.
+write('assets/caszual_pallets_plus/items/conveyor_t_junction.json',
+      {'model':{'type':'minecraft:model','model':'caszual_additions:block/transport/conveyor_t_junction_item'}})
 tag.write_text(json.dumps(obj,indent=2)+'\n')
 # Survival recipes; module kits each place a complete 3x3 footprint.
 for name in labels:
  ingredients={'pallet_rail_index':'minecraft:observer','conveyor_crank':'minecraft:lever','conveyor_hold':'minecraft:iron_bars','conveyor_logic':'minecraft:repeater','train_station_post':'minecraft:redstone_torch','pallet_pressure_plate':'minecraft:heavy_weighted_pressure_plate','pallet_transit_computer':'minecraft:map','conveyor_straight':'minecraft:hopper','conveyor_left':'minecraft:amethyst_shard','conveyor_right':'minecraft:quartz','conveyor_t_junction':'minecraft:dropper','conveyor_up':'minecraft:piston','conveyor_down':'minecraft:sticky_piston','pallet_rail':'minecraft:rail','pallet_rail_left':'minecraft:powered_rail','pallet_rail_right':'minecraft:detector_rail','pallet_engine':'minecraft:furnace','pallet_car':'minecraft:chest','passenger_car':'minecraft:oak_stairs','pallet_drone':'minecraft:ender_pearl','drone_parking_bay':'minecraft:lodestone','transport_controller':'minecraft:comparator','parking_bay_link':'minecraft:ender_eye'}
- write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':'caszual_additions:'+name,'count':1}})
+ write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':('caszual_pallets_plus:' if name=='conveyor_t_junction' else 'caszual_additions:')+name,'count':1}})
 print('Generated 13 modular guideways and transit control furniture, 4 vehicle models, controller, recipes and discovery tags.')
 
 for name in ('train_station_post','pallet_transit_computer'):

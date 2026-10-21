@@ -14,6 +14,10 @@ with zipfile.ZipFile(jar) as z:
     assert 'com/caszgamermd/palletsplus/mixin/MovingPalletTransportMixin.class' in names
     assert 'assets/caszual_additions/blockstates/conveyor_left.json' in names
     assert 'assets/caszual_additions/blockstates/conveyor_t_junction.json' in names
+    assert 'assets/caszual_pallets_plus/items/conveyor_t_junction.json' in names
+    assert 'data/caszual_additions/recipe/conveyor_t_junction.json' in names
+    recipe=json.loads(z.read('data/caszual_additions/recipe/conveyor_t_junction.json'))
+    assert recipe['result']['id']=='caszual_pallets_plus:conveyor_t_junction'
     assert 'assets/caszual_additions/blockstates/pallet_rail_right.json' in names
     tag=json.loads(z.read('data/caszual_additions/tags/item/caszual_content.json'))
     assert tag['replace'] is False and len(tag['values'])==23

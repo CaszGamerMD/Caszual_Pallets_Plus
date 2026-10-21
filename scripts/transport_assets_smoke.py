@@ -28,3 +28,8 @@ for name in names:
     assert len(states)==(72 if name=="conveyor_hold" else 108 if name=="conveyor_t_junction" else 36),name
     for variant in states.values():assert (assets/('models/'+variant['model'].split(':')[1]+'.json')).exists(),name
 print('Transport assets: model bounds, 36-state modules, item references and unique recipes passed.')
+
+native=json.loads((assets.parent/'caszual_pallets_plus/items/conveyor_t_junction.json').read_text())
+assert native['model']['model']=='caszual_additions:block/transport/conveyor_t_junction_item'
+t_recipe=json.loads((root/'data/caszual_additions/recipe/conveyor_t_junction.json').read_text())
+assert t_recipe['result']['id']=='caszual_pallets_plus:conveyor_t_junction'

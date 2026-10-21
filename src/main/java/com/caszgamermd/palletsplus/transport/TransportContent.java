@@ -28,6 +28,14 @@ public final class TransportContent {
             var ik=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId(name));
             ITEMS.put(name,Registry.register(BuiltInRegistries.ITEM,ik,new BlockItem(block,new Item.Properties().setId(ik).useBlockDescriptionPrefix())));
         }
+        // Save-compatible legacy ID stays registered. A native addon item ID
+        // additionally lets players discover the T-junction under
+        // @caszual_pallets_plus in recipe browsers and creative search.
+        var tKey=ResourceKey.create(Registries.ITEM,
+            net.minecraft.resources.Identifier.fromNamespaceAndPath(PalletsPlus.MOD_ID,"conveyor_t_junction"));
+        ITEMS.put("junction_search",Registry.register(BuiltInRegistries.ITEM,tKey,
+            new BlockItem(WAYS.get("conveyor_t_junction"),
+                new Item.Properties().setId(tKey).useBlockDescriptionPrefix())));
         LOGIC_ENTITY=Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,PalletsPlus.legacyId("logic_conveyor"),net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(LogicConveyorEntity::new,WAYS.get("conveyor_logic")).build());
         STATION=block("train_station_post",StationPostBlock::new);
         PLATE=block("pallet_pressure_plate",PalletPlateBlock::new);
