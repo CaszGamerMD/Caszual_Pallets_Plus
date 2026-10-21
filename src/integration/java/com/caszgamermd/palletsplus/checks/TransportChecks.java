@@ -116,8 +116,9 @@ public final class TransportChecks implements ModInitializer {
         for(int gx=40;gx<=56;gx++)for(int gz=12;gz<=26;gz++)
             level.setBlock(new BlockPos(gx,63,gz),Blocks.STONE.defaultBlockState(),2);
         TransportVehicle salvage=vehicle(level,0,39,18,18.5);
-        salvage.cargo[0].deck=new net.minecraft.world.item.ItemStack(
-            com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM);
+        salvage.cargo[0].deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
         salvage.cargo[0].items.set(0,new net.minecraft.world.item.ItemStack(
             net.minecraft.world.item.Items.DIAMOND,23));
         salvage.cargo[0].items.set(215,new net.minecraft.world.item.ItemStack(
