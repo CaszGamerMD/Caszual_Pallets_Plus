@@ -21,6 +21,14 @@ public final class PalletsPlus implements ModInitializer {
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB,Identifier.fromNamespaceAndPath(MOD_ID,"transport"),
             FabricCreativeModeTab.builder().title(Component.literal("Caszual Pallets Plus"))
                 .icon(()->new ItemStack(TransportContent.ITEMS.get("pallet_engine")))
-                .displayItems((parameters,output)->TransportContent.ITEMS.values().forEach(item->output.accept(new ItemStack(item)))).build());
+                .displayItems((parameters,output)->{
+                    // Feature spotlight: native-addon T-junction first in this
+                    // tab; preserve its old registered item for existing saves.
+                    output.accept(new ItemStack(TransportContent.ITEMS.get("junction_search")));
+                    TransportContent.ITEMS.forEach((name,item)->{
+                        if(!name.equals("junction_search")&&!name.equals("conveyor_t_junction"))
+                            output.accept(new ItemStack(item));
+                    });
+                }).build());
     }
 }
