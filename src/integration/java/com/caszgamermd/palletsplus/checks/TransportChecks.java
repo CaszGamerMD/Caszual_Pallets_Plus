@@ -47,6 +47,15 @@ public final class TransportChecks implements ModInitializer {
         return entity;
     }
     private void setup(MinecraftServer server){
+        var legacy=net.minecraft.resources.Identifier.fromNamespaceAndPath("caszual_additions","conveyor_t_junction");
+        var nativeId=net.minecraft.resources.Identifier.fromNamespaceAndPath("caszual_pallets_plus","conveyor_t_junction");
+        var oldItem=net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(legacy);
+        var newItem=net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(nativeId);
+        if(!(oldItem instanceof net.minecraft.world.item.BlockItem oldBlock)||
+           !(newItem instanceof net.minecraft.world.item.BlockItem newBlock)||
+           oldBlock.getBlock()!=TransportContent.WAYS.get("conveyor_t_junction")||
+           newBlock.getBlock()!=TransportContent.WAYS.get("conveyor_t_junction"))
+            throw new AssertionError("Both visible T-junction item IDs must place the same registered guideway.");
         var level=server.overworld();
         for(int x=0;x<=1;x++)for(int z=-14;z<=6;z++){level.setChunkForced(x,z,true);level.getChunk(x,z);}
         for(int z=84;z>=-210;z-=3)module(level,new BlockPos(8,64,z),z==-150?"pallet_rail_index":"pallet_rail");
