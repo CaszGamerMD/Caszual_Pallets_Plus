@@ -16,6 +16,25 @@ import net.minecraft.world.item.context.UseOnContext;
  * Selection belongs to the item and is dimension-scoped. */
 public final class ParkingBayLink extends Item {
     public ParkingBayLink(Properties p){super(p);}
+    /** In Minecraft 26.2 the Rack Computer accepts all occupied-hand
+     * clicks before Item.useOn runs, and the guideway's fallback click can
+     * invoke its empty-hand mode switch instead. Intercept ONLY this tool
+     * and these two targets before either block handles the click.
+     * Returning SUCCESS also prevents duplicate server activation.
+     */
+    public static void registerInteractions(){
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player,world,hand,hit)->{
+            ItemStack stack=player.getItemInHand(hand);
+            var state=world.getBlockState(hit.getBlockPos());
+            if(!shouldIntercept(stack,state))return InteractionResult.PASS;
+            if(!(stack.getItem() instanceof ParkingBayLink tool))return InteractionResult.PASS;
+            return tool.useOn(new UseOnContext(player,hand,hit));
+        });
+    }
+    public static boolean shouldIntercept(ItemStack held,net.minecraft.world.level.block.state.BlockState target){
+        return held.getItem() instanceof ParkingBayLink &&
+            (target.is(TransportContent.BAY) || target.is(RackContent.RACK_COMPUTER));
+    }
     @Override public InteractionResult useOn(UseOnContext c){
         if(!(c.getLevel() instanceof ServerLevel l))return InteractionResult.SUCCESS;
         var player=c.getPlayer();if(player==null)return InteractionResult.FAIL;
