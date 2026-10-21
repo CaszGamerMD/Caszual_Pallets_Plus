@@ -126,7 +126,11 @@ public final class TransportChecks implements ModInitializer {
         salvage.sync();
         String saved=salvage.salvageConveyor(level,new BlockPos(46,64,18));
         if(!saved.startsWith("Recovered the wrapped pallet"))
-            throw new AssertionError("Emergency physical pallet recovery failed: "+saved);
+            throw new AssertionError("Emergency physical pallet recovery failed: "+saved+
+                " probe: "+level.getBlockState(new BlockPos(44,63,16))+
+                " above: "+level.getBlockState(new BlockPos(44,64,16))+
+                " floor2: "+level.getBlockState(new BlockPos(45,63,15))+
+                " loaded: "+level.hasChunksAt(new BlockPos(43,63,15),new BlockPos(46,67,18)));
         BlockPos recoveredAt=null;
         for(int gx=40;gx<=56;gx++)for(int gz=12;gz<=26;gz++){
             var pallet=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
