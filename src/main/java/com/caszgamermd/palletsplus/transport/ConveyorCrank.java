@@ -22,9 +22,9 @@ public final class ConveyorCrank extends Item {
         // deliberately use the same recovery actions.
         var nearby=level.getEntitiesOfClass(TransportVehicle.class,
             new AABB(root).inflate(4,4,4),
-            v->v.kind()==0&&v.position().distanceToSqr(root.getCenter())<=36);
+            v->v.kind()==0&&v.position().distanceToSqr(new net.minecraft.world.phys.Vec3(root.getX()+.5,root.getY()+.5,root.getZ()+.5))<=36);
         if(!nearby.isEmpty()){
-            var stuck=nearby.stream().min(java.util.Comparator.comparingDouble(v->v.distanceToSqr(root.getCenter()))).orElseThrow();
+            var stuck=nearby.stream().min(java.util.Comparator.comparingDouble(v->v.distanceToSqr(new net.minecraft.world.phys.Vec3(root.getX()+.5,root.getY()+.5,root.getZ()+.5)))).orElseThrow();
             String result=player.isShiftKeyDown()?
                 stuck.salvageConveyor(level,player.blockPosition()):
                 stuck.restartConveyor(level);
