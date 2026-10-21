@@ -584,20 +584,21 @@ public final class TransportVehicle extends PathfinderMob {
         if(cargo[0].empty())return "The conveyor carrier contains no pallet.";
         if(near.distToCenterSqr(position())>256)
             return "Stand within 16 blocks of the stuck pallet to recover it.";
+        int unloaded=0,occupied=0,rejected=0;
         for(int radius=2;radius<=8;radius++)for(int x=-radius;x<=radius;x++)
             for(int z=-radius;z<=radius;z++){
                 if(Math.max(Math.abs(x),Math.abs(z))!=radius)continue;
                 for(int dy:new int[]{0,-1,1,-2,2}){
                     BlockPos place=near.offset(x,dy,z);
-                    if(!level.hasChunksAt(place.offset(-1,-1,-1),place.offset(2,3,2)))continue;
+                    if(!level.hasChunksAt(place.offset(-1,-1,-1),place.offset(2,3,2))){unloaded++;continue;}
                     // Do not place a solid pallet inside a living entity or
                     // another carrier. Keep the full 2x2 and three high clear.
                     // NORTH-oriented pallet occupies x..x+1 and z-1..z;
                     // check its actual complete 2x2 footprint, not z..z+1.
                     AABB space=new AABB(place.getX()-.1,place.getY(),place.getZ()-1.1,
                         place.getX()+2.1,place.getY()+3,place.getZ()+1.1);
-                    if(!level.getEntities(this,space,e->e.isAlive()&&!e.isSpectator()).isEmpty())continue;
-                    if(!cargo[0].place(level,place,Direction.NORTH))continue;
+                    if(!level.getEntities(this,space,e->e.isAlive()&&!e.isSpectator()).isEmpty()){occupied++;continue;}
+                    if(!cargo[0].place(level,place,Direction.NORTH)){rejected++;continue;}
                     // place() commits the original deck and 216 inventory
                     // slots to the ground before it clears our cargo.
                     running=false;traveling=false;sync();discard();
@@ -605,7 +606,9 @@ public final class TransportVehicle extends PathfinderMob {
                         place.toShortString()+".";
                 }
             }
-        return "No safe 2x2 ground found within 8 blocks. Clear a 2x2 supported area with three blocks of headroom and retry.";
+        return "No safe 2x2 ground within 8 blocks (unloaded "+unloaded+
+            ", occupied "+occupied+", unsuitable ground "+rejected+
+            "). Clear supported 2x2 ground with three blocks of headroom and retry.";
     }
     /** Dock transfer uses real pallet blocks beside the bay, never loose item drops. */
     private boolean serviceBay(ServerLevel l,boolean pickup){
