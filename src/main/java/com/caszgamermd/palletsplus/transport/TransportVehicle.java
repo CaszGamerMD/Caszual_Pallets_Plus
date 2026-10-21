@@ -532,6 +532,8 @@ public final class TransportVehicle extends PathfinderMob {
             double length=cornerFrom.distanceTo(cornerTo);
             if(length>1e-7)goal=cornerFrom.lerp(cornerTo,Math.clamp(cornerDistance/length,0,1));
         }
+        if(goal.distanceToSqr(position())>64)
+            return "Saved conveyor is more than 8 blocks away. Sneak-use the crank to salvage the pallet nearby.";
         if(!safeConveyorRecovery(level,goal,guide))
             return "Recovery position is obstructed. Clear nearby blocks/pallets or sneak-use the crank to unload safely.";
         // Only commit after validating the entire destination footprint.
@@ -590,8 +592,10 @@ public final class TransportVehicle extends PathfinderMob {
                     if(!level.hasChunksAt(place.offset(-1,-1,-1),place.offset(2,3,2)))continue;
                     // Do not place a solid pallet inside a living entity or
                     // another carrier. Keep the full 2x2 and three high clear.
-                    AABB space=new AABB(place.getX()-.1,place.getY(),place.getZ()-.1,
-                        place.getX()+2.1,place.getY()+3,place.getZ()+2.1);
+                    // NORTH-oriented pallet occupies x..x+1 and z-1..z;
+                    // check its actual complete 2x2 footprint, not z..z+1.
+                    AABB space=new AABB(place.getX()-.1,place.getY(),place.getZ()-1.1,
+                        place.getX()+2.1,place.getY()+3,place.getZ()+1.1);
                     if(!level.getEntities(this,space,e->e.isAlive()&&!e.isSpectator()).isEmpty())continue;
                     if(!cargo[0].place(level,place,Direction.NORTH))continue;
                     // place() commits the original deck and 216 inventory
