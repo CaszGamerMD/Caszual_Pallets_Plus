@@ -64,14 +64,36 @@ public final class DroneBayRoutes {
         TransitWorldData.get(level).setDirty();
         return "Bay connected to warehouse at "+computer.toShortString()+".";
     }
+    /** An output is deliberately selected while the player stands at it.
+     * Later, its chunk can unload while they visit a distant input bay.
+     * Save-backed role and coordinates are enough to finish the one-way
+     * route. Do not synchronously load the remote source chunk. */
     public static String link(ServerLevel level,BlockPos output,BlockPos input){
-        if(output.equals(input)||!valid(level,output)||!valid(level,input))return "Select two complete, different parking bays.";
+        if(output.equals(input))return "Select two different Drone Parking Bays.";
+        if(!valid(level,input))return "Destination INPUT bay is incomplete or not loaded.";
+        // A loaded source must still exist physically; an unloaded source
+        // was previously observed and its role is retained in SavedData.
+        if(level.hasChunkAt(output)&&!valid(level,output))
+            return "Selected OUTPUT bay was removed; select another bay.";
         Bay source=get(level,output),dest=get(level,input);
-        if(source==null||!source.output()||dest==null||!dest.input())
-            return "First choose an OUTPUT bay, then an INPUT bay.";
+        if(source==null)return "Select a registered OUTPUT bay first.";
+        if(!source.output())return "Selected source bay is INPUT. Choose an OUTPUT bay first.";
+        if(dest==null||!dest.input())
+            return "Destination bay is OUTPUT. Empty-hand right-click it once to set INPUT, then use this tool again.";
         edit(level,output).addProperty("linked",input.asLong());
         TransitWorldData.get(level).setDirty();
         return "Air route linked: OUTPUT "+output.toShortString()+" to INPUT "+input.toShortString()+".";
+    }
+    /** Remove stale records immediately when a 3x3 bay is broken, including
+     * incoming routes from distant source bays that may be unloaded. */
+    public static void forget(ServerLevel level,BlockPos root){
+        TransitWorldData data=TransitWorldData.get(level);
+        if(data.stations.remove(key(root))!=null)data.setDirty();
+        for(JsonObject station:data.stations.values()){
+            if(root.equals(pos(station,"linked"))){
+                station.remove("linked");data.setDirty();
+            }
+        }
     }
     public static boolean receiverReady(ServerLevel level,BlockPos input){
         Bay b=get(level,input);return b!=null&&b.input()&&valid(level,input);
