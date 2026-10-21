@@ -38,13 +38,13 @@ public final class ParkingBayLink extends Item {
                 if(response.startsWith("Bay connected"))t.remove("choose");
             }else if(dim.equals(t.getStringOr("dimension",""))&&"output".equals(t.getStringOr("choose",""))){
                 response=DroneBayRoutes.link(l,BlockPos.of(t.getLongOr("source",0)),root);
-                if(response.startsWith("Air route linked"))t.remove("choose");
+                if(response.startsWith("Air route linked")){t.remove("choose");t.remove("source");}
             }else{
                 var bay=DroneBayRoutes.get(l,root);
                 if(bay==null||bay.input())response="Select an OUTPUT bay first; empty-hand click a bay to toggle INPUT/OUTPUT.";
                 else{
                     t.putString("dimension",dim);t.putString("choose","output");t.putLong("source",root.asLong());
-                    response="OUTPUT bay selected. Click the destination INPUT bay.";
+                    response="OUTPUT bay selected. Travel to the destination INPUT bay and click it, even when the source chunk unloads.";
                 }
             }
         }else{return InteractionResult.PASS;}
