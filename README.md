@@ -74,3 +74,11 @@ A linked warehouse receives a one-time redstone notification pulse on an empty O
 ## Bay Link fix (0.4.2)
 
 Use the Parking Bay Link on an OUTPUT bay, then walk or fly to an INPUT bay and click it. The OUTPUT chunk does **not** need to remain loaded. Its saved role and coordinates are used for the second click. Wrong-way links show precise errors; to change a role, empty-hand right-click a bay. After a successful link the tool clears its pending selection. Breaking a bay also removes its saved role/route and invalidates incoming links; existing complete bays missing saved records are recovered when visited. Cargo and bay block IDs remain unchanged.
+
+## Conveyor pallet recovery (0.4.3)
+
+If a pallet gets bumped off the conveyor, stalls on a slope, or stays stuck after the route is cleared, **right-click its carrier with the Conveyor Crank** to restore the saved 3×3 guideway position and restart it. Clicking the occupied conveyor module with the crank also works when the pallet blocks access to the entity. The cargo and all 216 storage slots stay with the same carrier. Recovery checks the actual destination for obstructions and will not pass through walls or other transports.
+
+For an unrecoverable jam, **sneak + right-click the carrier or its occupied conveyor using the crank** to salvage it onto nearby supported, empty 2×2 ground (up to 8 blocks from the player with 3 blocks of headroom). The original complete pallet, items and filter settings are placed into the world before the empty carrier disappears. If no valid spot is found, both carrier and inventory stay unchanged; clear a platform and retry. No blocks have to be broken, and a saved vehicle from an older version is supported.
+
+**Important unload fix:** Caszual Additions' pallet is four blocks but only its root owns a BlockEntity. Pallets Plus previously rejected every unload after looking for nonexistent BlockEntities in the three satellite cells. This release fixes the common pallet placement path used by conveyors, drones, manual transfers and emergency salvage. Full 216-slot contents and wrapper/filter metadata are preserved in the root.
