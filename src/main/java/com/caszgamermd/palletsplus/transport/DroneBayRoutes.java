@@ -28,6 +28,9 @@ public final class DroneBayRoutes {
     }
     public static Bay get(ServerLevel level,BlockPos root){
         JsonObject o=TransitWorldData.get(level).stations.get(key(root));
+        // Upgrade worlds with a complete bay placed before station records
+        // were introduced. Never fabricate records for unloaded coordinates.
+        if(o==null&&valid(level,root))o=edit(level,root);
         if(o==null||!"bay".equals(text(o,"kind","")))return null;
         return new Bay(root,"input".equals(text(o,"mode","output")),pos(o,"linked"),pos(o,"warehouse"),text(o,"owner",""));
     }
