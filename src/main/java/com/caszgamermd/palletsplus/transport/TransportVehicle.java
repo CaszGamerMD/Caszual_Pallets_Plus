@@ -471,6 +471,138 @@ public final class TransportVehicle extends PathfinderMob {
         if(!root.equals(node)&&!root.equals(previousNode)&&!root.equals(target))return false;
         return shape.toAabbs().stream().allMatch(part->part.maxY<=1.00001);
     }
+    /** Restores an out-of-sync conveyor carrier to its saved guideway path.
+     * Never clears or re-creates the PalletCargo: its 216 inventory slots
+     * remain owned by this entity throughout the recovery. */
+    public String restartConveyor(ServerLevel level){
+        if(kind()!=0)return "Only conveyor pallet carriers can be recovered.";
+        BlockPos guide=node;
+        boolean reanchor=false;
+        if(!GuidewayBlock.complete(level,guide)){
+            double best=Double.POSITIVE_INFINITY;
+            BlockPos located=null;
+            BlockPos current=blockPosition();
+            for(int dx=-4;dx<=4;dx++)for(int dz=-4;dz<=4;dz++)
+                for(int dy=-2;dy<=2;dy++){
+                    BlockPos cell=current.offset(dx,dy,dz);
+                    if(!level.hasChunkAt(cell))continue;
+                    var st=level.getBlockState(cell);
+                    if(!(st.getBlock() instanceof GuidewayBlock w)||w.rail()||w.bay())continue;
+                    BlockPos root=GuidewayBlock.root(cell,st);
+                    if(!GuidewayBlock.complete(level,root))continue;
+                    double score=root.distToCenterSqr(position());
+                    if(score<best){best=score;located=root;}
+                }
+            if(located==null||best>50)
+                return "No complete conveyor within reach; use sneak + crank to recover the pallet onto clear ground.";
+            guide=located;reanchor=true;
+        }
+        var state=level.getBlockState(guide);
+        if(!(state.getBlock() instanceof GuidewayBlock way)||way.rail()||way.bay())
+            return "Recovery requires a complete conveyor underneath this pallet.";
+        Direction travel=reanchor?state.getValue(GuidewayBlock.FACING):heading;
+        int turn=way.kind.endsWith("_left")?-1:way.kind.endsWith("_right")?1:0;
+        if(way.kind.equals("conveyor_logic")&&level.getBlockEntity(guide) instanceof LogicConveyorEntity logic){
+            int selected=latchedRoute>=0&&!reanchor?latchedRoute:logic.route(GuidewayBlock.powered(level,guide));
+            if(selected==3)return "Logic conveyor is set to HOLD; change its routing first.";
+            turn=selected==1?-1:selected==2?1:0;
+        }
+        if(way.junction()){
+            if(reanchor||!ConveyorJunction.accepts(state.getValue(GuidewayBlock.FACING),state.getValue(GuidewayBlock.OUTLET),travel)){
+                Direction stem=state.getValue(GuidewayBlock.FACING);
+                // Prefer the prior travel direction if the saved lane is valid.
+                boolean found=false;
+                for(int port=0;port<3;port++){
+                    Direction incoming=ConveyorJunction.port(stem,port).getOpposite();
+                    if(ConveyorJunction.accepts(stem,state.getValue(GuidewayBlock.OUTLET),incoming)){
+                        travel=incoming;found=true;break;
+                    }
+                }
+                if(!found)return "T-junction has no valid incoming lane.";
+            }
+            turn=ConveyorJunction.turn(state.getValue(GuidewayBlock.FACING),state.getValue(GuidewayBlock.OUTLET),travel);
+        }else if(reanchor)travel=state.getValue(GuidewayBlock.FACING);
+        double at=reanchor?.5:Math.clamp(progress,0,1);
+        int rotation=switch(travel){case EAST->1;case SOUTH->2;case WEST->3;default->0;};
+        var path=TransportPath.sample(turn,way.rise(),rotation,at);
+        Vec3 goal=new Vec3(guide.getX()+.5+path.x(),guide.getY()+path.y(),guide.getZ()+.5+path.z());
+        // During a diagonal corner seam, preserve its saved location if the
+        // destination is still valid; otherwise recover onto the source path.
+        if(!reanchor&&!cornerJoin.equals(NO_STATION)&&GuidewayBlock.complete(level,cornerJoin)){
+            double length=cornerFrom.distanceTo(cornerTo);
+            if(length>1e-7)goal=cornerFrom.lerp(cornerTo,Math.clamp(cornerDistance/length,0,1));
+        }
+        if(!safeConveyorRecovery(level,goal,guide))
+            return "Recovery position is obstructed. Clear nearby blocks/pallets or sneak-use the crank to unload safely.";
+        // Only commit after validating the entire destination footprint.
+        if(reanchor){
+            previousNode=guide;node=guide;progress=.5;latchedRoute=-1;
+            cornerJoin=NO_STATION;cornerDistance=0;target=guide;
+        }
+        heading=travel;
+        setPos(goal.x,goal.y,goal.z);
+        setYRot(travel.toYRot());setYBodyRot(getYRot());
+        trainSpeed=0;running=true;traveling=false;lastMoveTick=-100;
+        status="Conveyor recovered — moving";
+        record();sync();
+        return "Pallet re-centered and conveyor restarted. Cargo preserved ("+
+            cargo[0].items.stream().filter(stack->!stack.isEmpty()).count()+" occupied slots).";
+    }
+    private boolean safeConveyorRecovery(ServerLevel level,Vec3 point,BlockPos guide){
+        AABB box=new AABB(point.x-1.2,point.y,point.z-1.2,point.x+1.2,point.y+2.8,point.z+1.2);
+        BlockPos min=BlockPos.containing(box.minX,box.minY,box.minZ);
+        BlockPos max=BlockPos.containing(box.maxX,box.maxY,box.maxZ);
+        if(level.isOutsideBuildHeight(min)||level.isOutsideBuildHeight(max)
+                ||!level.hasChunksAt(min,max)
+                ||!level.getWorldBorder().isWithinBounds(min)
+                ||!level.getWorldBorder().isWithinBounds(max))return false;
+        for(BlockPos p:BlockPos.betweenClosed(min,max)){
+            var st=level.getBlockState(p);
+            if(st.getBlock() instanceof GuidewayBlock way){
+                if(!way.rail()&&!way.bay()){
+                    BlockPos root=GuidewayBlock.root(p,st);
+                    if(root.equals(guide)||root.equals(previousNode)||root.equals(target))continue;
+                }
+                if(p.getY()<=point.y+.5)continue;
+            }
+            var shape=st.getCollisionShape(level,p);
+            if(shape.isEmpty())continue;
+            if(conveyorSupport(level,p,shape))continue;
+            if(shape.toAabbs().stream().anyMatch(part->part.move(p).intersects(box)))return false;
+        }
+        for(TransportVehicle other:level.getEntitiesOfClass(TransportVehicle.class,box))
+            if(other!=this)return false;
+        return true;
+    }
+    /** Emergency physical placement, not item-drops or deletion. Tries only
+     * loaded, supported and clear 2x2 ground. A failed placement leaves the
+     * original carrier and all inventory untouched. */
+    public String salvageConveyor(ServerLevel level,BlockPos near){
+        if(kind()!=0)return "Only conveyor pallets can be salvaged.";
+        if(cargo[0].empty())return "The conveyor carrier contains no pallet.";
+        if(near.distToCenterSqr(position())>256)
+            return "Stand within 16 blocks of the stuck pallet to recover it.";
+        for(int radius=2;radius<=8;radius++)for(int x=-radius;x<=radius;x++)
+            for(int z=-radius;z<=radius;z++){
+                if(Math.max(Math.abs(x),Math.abs(z))!=radius)continue;
+                for(int dy:new int[]{0,-1,1,-2,2}){
+                    BlockPos place=near.offset(x,dy,z);
+                    if(!level.hasChunksAt(place.offset(-1,-1,-1),place.offset(2,3,2)))continue;
+                    // Do not place a solid pallet inside a living entity or
+                    // another carrier. Keep the full 2x2 and three high clear.
+                    AABB space=new AABB(place.getX()-.1,place.getY(),place.getZ()-.1,
+                        place.getX()+2.1,place.getY()+3,place.getZ()+2.1);
+                    if(!level.getEntities(this,space,e->e.isAlive()&&!e.isSpectator()).isEmpty())continue;
+                    if(!cargo[0].place(level,place,Direction.NORTH))continue;
+                    // place() commits the original deck and 216 inventory
+                    // slots to the ground before it clears our cargo.
+                    running=false;traveling=false;sync();discard();
+                    return "Recovered the wrapped pallet and all contents onto clear ground at "+
+                        place.toShortString()+".";
+                }
+            }
+        return "No safe 2x2 ground found within 8 blocks. Clear a 2x2 supported area with three blocks of headroom and retry.";
+    }
     /** Dock transfer uses real pallet blocks beside the bay, never loose item drops. */
     private boolean serviceBay(ServerLevel l,boolean pickup){
         if(!GuidewayBlock.complete(l,node)||!l.getBlockState(node).is(TransportContent.BAY))return false;
@@ -565,6 +697,12 @@ public final class TransportVehicle extends PathfinderMob {
             String problem=com.caszgamermd.palletsplus.integration.CrewTransport.scannerProblem(player.getItemInHand(hand),(ServerLevel)level());
             if(!problem.isEmpty()){sp.sendSystemMessage(Component.literal(problem));return InteractionResult.SUCCESS;}
             sp.sendSystemMessage(Component.literal(com.caszgamermd.palletsplus.integration.CrewTransport.deliverTrain((ServerLevel)level(),sp,this)));return InteractionResult.SUCCESS;
+        }
+        if(kind()==0&&player.getItemInHand(hand).is(TransportContent.ITEMS.get("conveyor_crank"))){
+            String response=player.isShiftKeyDown()?salvageConveyor((ServerLevel)level(),player.blockPosition()):
+                restartConveyor((ServerLevel)level());
+            player.sendSystemMessage(Component.literal(response));
+            return InteractionResult.SUCCESS;
         }
         if(player.getItemInHand(hand).is(TransportContent.CONTROLLER))return TransportController.useVehicle(player,hand,this);
         if(!player.getItemInHand(hand).isEmpty())return InteractionResult.PASS;
