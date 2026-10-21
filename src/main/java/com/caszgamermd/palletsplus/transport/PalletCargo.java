@@ -38,16 +38,24 @@ public final class PalletCargo {
                 ||level.getBlockState(p.below()).getCollisionShape(level,p.below()).isEmpty())return false;
             for(int h=0;h<3;h++)if(!level.getBlockState(p.above(h)).canBeReplaced())return false;
         }
-        // Suppress neighbor updates until every part exists. Roll back any partial placement.
+        // Caszual Additions pallets are FOUR block cells but exactly ONE
+        // inventory/block entity at PART=0. PARTs 1–3 deliberately have NO
+        // BlockEntity; requiring one there caused EVERY conveyor/drone
+        // unload and emergency recovery to fail after placing part 1.
+        // Suppress neighbor updates until all four cells are committed.
         List<BlockPos> placed=new ArrayList<>();boolean ok=true;
         for(int i=0;i<4;i++){
             BlockPos p=PalletBlock.partPos(pos,i,root);
             if(!level.setBlock(p,root.setValue(PalletBlock.PART,i),2)){ok=false;break;}
             placed.add(p);
-            if(level.getBlockEntity(p) instanceof PalletBlockEntity be)be.initialize(pos,i,deck);else{ok=false;break;}
         }
-        if(!ok){for(BlockPos p:placed)level.removeBlock(p,false);return false;}
-        PalletBlockEntity dest=(PalletBlockEntity)level.getBlockEntity(pos);
+        if(!ok||!(level.getBlockEntity(pos) instanceof PalletBlockEntity dest)){
+            for(BlockPos p:placed)level.removeBlock(p,false);
+            return false;
+        }
+        // The sole root controller owns the deck, wrap/filter metadata and
+        // complete 216-slot inventory; satellite parts own nothing.
+        dest.initialize(pos,0,deck);
         for(int i=0;i<216;i++)dest.setItem(i,items.get(i).copy());
         clear();
         for(BlockPos p:placed)level.updateNeighborsAt(p,block);
