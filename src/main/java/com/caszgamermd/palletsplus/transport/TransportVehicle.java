@@ -265,6 +265,27 @@ public final class TransportVehicle extends PathfinderMob {
 
         }
     }
+    /** Place the original carried pallet into the world as a normal
+     * Caszual Additions pallet, perfectly aligned to the plate's 2x2 top.
+     * The PalletCargo transaction transfers its deck item, filter/wrap data
+     * and all 216 inventory slots. Failed placement retains the moving cargo.
+     * Only conveyor carriers may be consumed; passing train cars and drones
+     * must never lose their shipments simply by flying over a plate. */
+    public boolean landOnPlate(ServerLevel level,BlockPos pad){
+        if(kind()!=0||!isAlive()||cargo[0].empty()||
+                !PalletPlateBlock.complete(level,pad))return false;
+        double altitude=getY()-pad.getY();
+        if(altitude<-.1||altitude>2.3)return false;
+        // EAST-oriented pallet starts at the plate's north-west tile and
+        // occupies precisely x..x+1 and z..z+1; root + its 3 satellites.
+        BlockPos palletRoot=pad.above();
+        if(!cargo[0].place(level,palletRoot,Direction.EAST))return false;
+        running=false;traveling=false;status="Placed on pallet pressure plate";
+        sync();
+        level.scheduleTick(pad,TransportContent.PLATE,1);
+        discard();
+        return true;
+    }
     private double advanceGuideway(ServerLevel l,double budget){
         if(!cornerJoin.equals(NO_STATION))return advanceCornerJoin(l,budget);
         // Do not treat unloaded chunks as broken tracks: active ticket
@@ -321,6 +342,19 @@ public final class TransportVehicle extends PathfinderMob {
                 traveling=false;status="Waiting for loaded route";return distance;
             }
             if(!GuidewayBlock.complete(l,next)){
+                if(kind()==0){
+                    // The last conveyor delivers to a 2x2 pressure plate,
+                    // rather than holding its pallet forever in transit.
+                    // This also works when the smaller plate is not aligned
+                    // exactly with the 3x3 module centerline.
+                    BlockPos pad=PalletPlateBlock.ahead(l,position(),out);
+                    if(pad!=null){
+                        if(landOnPlate(l,pad))return distance;
+                        running=false;traveling=false;
+                        status="Pressure plate occupied — awaiting clear pallet footprint";
+                        return distance;
+                    }
+                }
                 // Two 90-degree corner modules can meet at a diagonal tip,
                 // without occupying a shared straight module. A short
                 // guided seam follows the edge to the next corner's inlet.
