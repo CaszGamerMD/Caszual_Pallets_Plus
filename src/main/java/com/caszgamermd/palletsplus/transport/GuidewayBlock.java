@@ -99,7 +99,23 @@ public final class GuidewayBlock extends Block implements EntityBlock {
         return "T-junction OUT: "+ConveyorJunction.port(stem,selected).getName().toUpperCase(java.util.Locale.ROOT)+
             " — the other two arms are inputs.";
     }
+    @Override protected net.minecraft.world.InteractionResult useItemOn(
+            ItemStack stack,BlockState state,Level level,BlockPos pos,
+            net.minecraft.world.entity.player.Player player,net.minecraft.world.InteractionHand hand,
+            net.minecraft.world.phys.BlockHitResult hit){
+        // Fallback when another mod bypasses Fabric's early click hook.
+        // A linking tool must NEVER be treated as an empty hand, since
+        // switching the receiving bay's mode erases its air routes.
+        if(bay()&&stack.getItem() instanceof ParkingBayLink link)
+            return link.useOn(new net.minecraft.world.item.context.UseOnContext(player,hand,hit));
+        return net.minecraft.world.InteractionResult.PASS;
+    }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
+        // Some modded interaction paths fall through even with the tool
+        // still held. Never toggle INPUT/OUTPUT in that case.
+        if(bay()&&(player.getMainHandItem().getItem() instanceof ParkingBayLink ||
+                    player.getOffhandItem().getItem() instanceof ParkingBayLink))
+            return net.minecraft.world.InteractionResult.PASS;
         if(bay()){
             if(l instanceof ServerLevel server)
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(DroneBayRoutes.mode(server,root(p,s))));
