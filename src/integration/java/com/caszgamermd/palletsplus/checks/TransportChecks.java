@@ -115,6 +115,21 @@ public final class TransportChecks implements ModInitializer {
         if(!mode.contains("INPUT"))throw new AssertionError("Input bay configuration: "+mode);
         String linked=DroneBayRoutes.link(level,send,receive);
         if(!linked.startsWith("Air route linked"))throw new AssertionError(linked);
+        // Reproduce the real player workflow: after choosing a distant
+        // OUTPUT, its chunk unloads while the player clicks the INPUT.
+        // Previously the second click failed because it tried to validate
+        // both physical bays as loaded at the same time.
+        BlockPos distantOutput=new BlockPos(20012,64,20012);
+        if(level.hasChunkAt(distantOutput))
+            throw new AssertionError("Remote bay chunk unexpectedly loaded during test");
+        TransitWorldData.get(level).station(distantOutput,"bay"); // previously discovered OUTPUT
+        String remoteLink=DroneBayRoutes.link(level,distantOutput,receive);
+        if(!remoteLink.startsWith("Air route linked"))
+            throw new AssertionError("Unloaded source parking bay could not link: "+remoteLink);
+        if(!receive.equals(DroneBayRoutes.get(level,distantOutput).linked()))
+            throw new AssertionError("Remote bay route was not saved to the source record");
+        if(!DroneBayRoutes.link(level,receive,send).startsWith("Selected source bay is INPUT"))
+            throw new AssertionError("Reverse INPUT-to-OUTPUT routing was not rejected");
         drone=vehicle(level,4,12,9,9.5);
         drone.cargo[0].deck=new net.minecraft.world.item.ItemStack(Blocks.CHEST.asItem());
         drone.sync();
