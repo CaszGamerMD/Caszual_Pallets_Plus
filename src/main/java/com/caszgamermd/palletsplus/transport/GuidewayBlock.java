@@ -101,7 +101,7 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     }
     @Override protected net.minecraft.world.InteractionResult useItemOn(
             ItemStack stack,BlockState state,Level level,BlockPos pos,
-            net.minecraft.world.entity.player.Player player,InteractionHand hand,
+            net.minecraft.world.entity.player.Player player,net.minecraft.world.InteractionHand hand,
             net.minecraft.world.phys.BlockHitResult hit){
         // Fallback when another mod bypasses Fabric's early click hook.
         // A linking tool must NEVER be treated as an empty hand, since
