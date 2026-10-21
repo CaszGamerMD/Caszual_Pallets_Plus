@@ -122,6 +122,7 @@ public final class GuidewayBlock extends Block implements EntityBlock {
         removing=true;
         try{
             BlockPos r=root(p,s);
+            if(bay())DroneBayRoutes.forget(l,r);
             for(int i=0;i<9;i++){
                 BlockPos q=cell(r,s.getValue(FACING),i);BlockState actual=l.getBlockState(q);
                 if(actual.is(this)&&actual.getValue(PART)==i&&actual.getValue(FACING)==s.getValue(FACING))l.removeBlock(q,false);
