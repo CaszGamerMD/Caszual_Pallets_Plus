@@ -158,6 +158,21 @@ public final class TransportChecks implements ModInitializer {
         bay(level,send);bay(level,receive);
         String mode=DroneBayRoutes.mode(level,receive);
         if(!mode.contains("INPUT"))throw new AssertionError("Input bay configuration: "+mode);
+        // Link tool must win both over the bay's empty-hand mode toggle and
+        // Additions Rack Computer's unconditional occupied-hand terminal GUI.
+        var linkingTool=new net.minecraft.world.item.ItemStack(
+            TransportContent.ITEMS.get("parking_bay_link"));
+        if(!ParkingBayLink.shouldIntercept(linkingTool,level.getBlockState(receive))
+            ||ParkingBayLink.shouldIntercept(net.minecraft.world.item.ItemStack.EMPTY,
+                level.getBlockState(receive)))
+            throw new AssertionError("Parking Bay Link interaction priority is incorrect");
+        BlockPos rackComputer=new BlockPos(18,64,12);
+        level.setBlock(rackComputer,
+            com.caszgamermd.caszualadditions.racks.RackContent.RACK_COMPUTER.defaultBlockState(),2);
+        if(!ParkingBayLink.shouldIntercept(linkingTool,level.getBlockState(rackComputer)))
+            throw new AssertionError("Warehouse Rack Computer will consume Parking Bay Link");
+        if(!DroneBayRoutes.get(level,receive).input())
+            throw new AssertionError("Link tool setup unexpectedly changed INPUT bay mode");
         String linked=DroneBayRoutes.link(level,send,receive);
         if(!linked.startsWith("Air route linked"))throw new AssertionError(linked);
         // Reproduce the real player workflow: after choosing a distant
