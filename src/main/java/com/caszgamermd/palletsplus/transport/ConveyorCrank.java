@@ -17,12 +17,26 @@ public final class ConveyorCrank extends Item {
         if(!(context.getLevel() instanceof ServerLevel level))return InteractionResult.SUCCESS;
         BlockPos root=GuidewayBlock.root(context.getClickedPos(),state);
         if(!GuidewayBlock.complete(level,root)){player.sendSystemMessage(Component.literal("Complete the conveyor module first."));return InteractionResult.SUCCESS;}
+        // Pallets often cover the whole 3x3 conveyor so the player may
+        // click the block instead of the carrier entity. Both interactions
+        // deliberately use the same recovery actions.
+        var nearby=level.getEntitiesOfClass(TransportVehicle.class,
+            new AABB(root).inflate(4,4,4),
+            v->v.kind()==0&&v.position().distanceToSqr(root.getCenter())<=36);
+        if(!nearby.isEmpty()){
+            var stuck=nearby.stream().min(java.util.Comparator.comparingDouble(v->v.distanceToSqr(root.getCenter()))).orElseThrow();
+            String result=player.isShiftKeyDown()?
+                stuck.salvageConveyor(level,player.blockPosition()):
+                stuck.restartConveyor(level);
+            player.sendSystemMessage(Component.literal(result));
+            return InteractionResult.SUCCESS;
+        }
         if(way.junction()&&!player.isShiftKeyDown()){
             player.sendSystemMessage(Component.literal(GuidewayBlock.cycleJunction(level,root)));
             return InteractionResult.SUCCESS;
         }
         if(!level.getEntitiesOfClass(TransportVehicle.class,new AABB(root).inflate(3,3,3)).isEmpty()){
-            player.sendSystemMessage(Component.literal("Clear the pallet off this conveyor before changing its direction."));return InteractionResult.SUCCESS;
+            player.sendSystemMessage(Component.literal("A transport occupies this guideway; clear it before changing direction."));return InteractionResult.SUCCESS;
         }
         Direction facing=player.isShiftKeyDown()?state.getValue(GuidewayBlock.FACING).getClockWise():player.getDirection();
         // The footprint is a square: reassign all nine parts atomically before neighbor updates.
