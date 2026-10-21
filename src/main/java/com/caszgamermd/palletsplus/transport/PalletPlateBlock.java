@@ -29,12 +29,65 @@ public final class PalletPlateBlock extends Block {
     @Override public BlockState getStateForPlacement(BlockPlaceContext c){for(int i=0;i<4;i++){BlockPos p=cell(c.getClickedPos(),i);if(!c.getLevel().hasChunkAt(p)||!c.getLevel().getWorldBorder().isWithinBounds(p)||c.getLevel().isOutsideBuildHeight(p)||!c.getLevel().getBlockState(p).canBeReplaced())return null;}return defaultBlockState();}
     @Override public void setPlacedBy(Level l,BlockPos p,BlockState s,LivingEntity e,ItemStack stack){if(l.isClientSide())return;for(int i=1;i<4;i++)l.setBlock(cell(p,i),s.setValue(PART,i),3);l.scheduleTick(p,this,2);}
     @Override protected void onPlace(BlockState s,Level l,BlockPos p,BlockState old,boolean moved){if(!l.isClientSide()&&s.getValue(PART)==0)l.scheduleTick(p,this,2);}
+    /** All 4 tiles of the landing pad must still be present before placing
+     * a physical four-cell Caszual Additions pallet above them. */
+    public static boolean complete(ServerLevel level,BlockPos root){
+        if(!level.hasChunksAt(root,root.offset(1,0,1)))return false;
+        for(int part=0;part<4;part++){
+            var state=level.getBlockState(cell(root,part));
+            if(!(state.getBlock() instanceof PalletPlateBlock)||state.getValue(PART)!=part)
+                return false;
+        }
+        return true;
+    }
+    /** Find a pad directly ahead of a conveyor endpoint, without scanning
+     * or loading remote chunks. The pallet is centered onto the 2x2 plate,
+     * not turned into an item or left suspended inside a moving carrier. */
+    public static BlockPos ahead(ServerLevel level,net.minecraft.world.phys.Vec3 at,Direction travel){
+        BlockPos nearby=BlockPos.containing(at);
+        BlockPos best=null;double bestDist=Double.POSITIVE_INFINITY;
+        for(int dy=-2;dy<=1;dy++)for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++){
+            BlockPos touched=nearby.offset(dx,dy,dz);
+            if(!level.hasChunkAt(touched))continue;
+            var state=level.getBlockState(touched);
+            if(!(state.getBlock() instanceof PalletPlateBlock))continue;
+            BlockPos pad=root(touched,state);
+            if(!complete(level,pad))continue;
+            double h=at.y-pad.getY();
+            if(h<-.1||h>2.3)continue;
+            double vx=pad.getX()+1-at.x,vz=pad.getZ()+1-at.z;
+            double ahead=vx*travel.getStepX()+vz*travel.getStepZ();
+            double across=vx*travel.getStepZ()-vz*travel.getStepX();
+            double dist=vx*vx+vz*vz;
+            if(ahead<-.15||ahead>2.5||Math.abs(across)>1.15||dist>6.25||dist>=bestDist)
+                continue;
+            best=pad;bestDist=dist;
+        }
+        return best;
+    }
     @Override protected void tick(BlockState s,ServerLevel l,BlockPos p,RandomSource r){
         if(s.getValue(PART)!=0)return;
-        boolean loaded=l.hasChunksAt(p,p.offset(1,2,1));
+        boolean loaded=l.hasChunksAt(p,p.offset(1,3,1));
         boolean occupied=false;
-        if(loaded){for(int i=0;i<4;i++)if(l.getBlockState(cell(p,i).above()).getBlock() instanceof PalletBlock)occupied=true;
-            if(!occupied)occupied=l.getEntitiesOfClass(TransportVehicle.class,new AABB(p.getX(),p.getY(),p.getZ(),p.getX()+2,p.getY()+2,p.getZ()+2)).stream().anyMatch(TransportVehicle::hasCargo);}
+        if(loaded&&complete(l,p)){
+            // When a carrier actually touches the landing pad, transact its
+            // stored pallet into the real four-block pallet on top. Golems can
+            // then target the standard wrappedController() without transport
+            // awareness. Never consume cargo unless placement succeeded.
+            AABB arrival=new AABB(p.getX()-.5,p.getY()-.1,p.getZ()-.5,
+                p.getX()+2.5,p.getY()+2.5,p.getZ()+2.5);
+            for(TransportVehicle vehicle:l.getEntitiesOfClass(TransportVehicle.class,arrival)){
+                if(vehicle.kind()!=0||!vehicle.hasCargo())continue;
+                double dx=vehicle.getX()-(p.getX()+1),dz=vehicle.getZ()-(p.getZ()+1);
+                if(dx*dx+dz*dz<=1.44)vehicle.landOnPlate(l,p);
+            }
+        }
+        if(loaded){
+            for(int i=0;i<4;i++)if(l.getBlockState(cell(p,i).above()).getBlock() instanceof PalletBlock)occupied=true;
+            if(!occupied)occupied=l.getEntitiesOfClass(TransportVehicle.class,
+                new AABB(p.getX(),p.getY(),p.getZ(),p.getX()+2,p.getY()+2,p.getZ()+2))
+                .stream().anyMatch(TransportVehicle::hasCargo);
+        }
         for(int i=0;i<4;i++){BlockPos q=cell(p,i);var a=l.getBlockState(q);if(a.is(this)&&a.getValue(POWERED)!=occupied){l.setBlock(q,a.setValue(POWERED,occupied),3);l.updateNeighborsAt(q.below(),this);}}
         l.scheduleTick(p,this,4);
     }
