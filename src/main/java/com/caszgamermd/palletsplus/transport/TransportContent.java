@@ -60,6 +60,7 @@ public final class TransportContent {
         var linkKey=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("parking_bay_link"));
         ITEMS.put("parking_bay_link",Registry.register(BuiltInRegistries.ITEM,linkKey,
             new ParkingBayLink(new Item.Properties().stacksTo(1).setId(linkKey))));
+        ParkingBayLink.registerInteractions();
         var ek=ResourceKey.create(Registries.ENTITY_TYPE,PalletsPlus.legacyId("pallet_transport"));
         VEHICLE=Registry.register(BuiltInRegistries.ENTITY_TYPE,ek,EntityType.Builder.<TransportVehicle>of(TransportVehicle::new,MobCategory.MISC).sized(2.4f,2.5f).build(ek));
         FabricDefaultAttributeRegistry.register(VEHICLE,TransportVehicle.attributes());
