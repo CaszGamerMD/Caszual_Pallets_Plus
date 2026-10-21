@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone,recoveredConveyor;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -94,6 +94,46 @@ public final class TransportChecks implements ModInitializer {
         moduleFacing(level,new BlockPos(60,64,0),"conveyor_right",Direction.NORTH);
         moduleFacing(level,new BlockPos(63,64,-3),"conveyor_left",Direction.EAST);
         moduleFacing(level,new BlockPos(63,64,-6),"conveyor_straight",Direction.NORTH);
+        // Real stuck-carrier regression: deliberately bump the physical
+        // entity away from its saved path, then recover without losing cargo.
+        module(level,new BlockPos(36,64,0),"conveyor_straight");
+        module(level,new BlockPos(36,64,-3),"conveyor_straight");
+        module(level,new BlockPos(36,64,-6),"conveyor_straight");
+        recoveredConveyor=vehicle(level,0,36,0,.5);
+        recoveredConveyor.cargo[0].deck=new net.minecraft.world.item.ItemStack(
+            com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM);
+        recoveredConveyor.cargo[0].items.set(0,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.DIAMOND,17));
+        recoveredConveyor.sync();
+        recoveredConveyor.setPos(37.3,64.26,.5);
+        String recovery=recoveredConveyor.restartConveyor(level);
+        if(!recovery.startsWith("Pallet re-centered")||Math.abs(recoveredConveyor.getX()-36.5)>.001||
+                recoveredConveyor.cargo[0].items.get(0).getCount()!=17)
+            throw new AssertionError("Bumped conveyor pallet failed no-loss restart: "+recovery);
+        // Emergency salvage must physically rebuild the original pallet and
+        // its 216-slot cargo, removing the carrier only AFTER ground commit.
+        module(level,new BlockPos(39,64,18),"conveyor_straight");
+        for(int gx=40;gx<=56;gx++)for(int gz=12;gz<=26;gz++)
+            level.setBlock(new BlockPos(gx,63,gz),Blocks.STONE.defaultBlockState(),2);
+        TransportVehicle salvage=vehicle(level,0,39,18,18.5);
+        salvage.cargo[0].deck=new net.minecraft.world.item.ItemStack(
+            com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM);
+        salvage.cargo[0].items.set(0,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.DIAMOND,23));
+        salvage.cargo[0].items.set(215,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.EMERALD,9));
+        salvage.sync();
+        String saved=salvage.salvageConveyor(level,new BlockPos(46,64,18));
+        if(!saved.startsWith("Recovered the wrapped pallet"))
+            throw new AssertionError("Emergency physical pallet recovery failed: "+saved);
+        BlockPos recoveredAt=null;
+        for(int gx=40;gx<=56;gx++)for(int gz=12;gz<=26;gz++){
+            var pallet=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
+                .wrappedController(level,new BlockPos(gx,64,gz));
+            if(pallet!=null&&pallet.getItem(0).getCount()==23&&pallet.getItem(215).getCount()==9)
+                recoveredAt=pallet.getBlockPos();
+        }
+        if(recoveredAt==null)throw new AssertionError("Emergency salvage lost pallet contents");
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -166,6 +206,9 @@ public final class TransportChecks implements ModInitializer {
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
+            if(recoveredConveyor.getZ()>-6.9||
+                !recoveredConveyor.cargo[0].items.get(0).is(net.minecraft.world.item.Items.DIAMOND))
+                throw new AssertionError("Recovered conveyor failed to resume moving with intact cargo");
             if(diagonalCorner.getZ()>-6.9||!diagonalCorner.transitStatus().startsWith("End of route"))
                 throw new AssertionError("Diagonally touching conveyor corners did not join: "+diagonalCorner.transitStatus()+" x="+diagonalCorner.getX()+" z="+diagonalCorner.getZ());
             cornerDone=true;diagonalCorner.discard();
@@ -212,7 +255,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage");
             engine=null;server.halt(false);
         }
     }
