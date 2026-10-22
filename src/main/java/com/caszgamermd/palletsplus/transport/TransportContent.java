@@ -52,7 +52,14 @@ public final class TransportContent {
         var bayKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("drone_parking_bay"));
         BAY=Registry.register(BuiltInRegistries.BLOCK,bayKey,new GuidewayBlock("drone_parking_bay",BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(4).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().setId(bayKey)));
         var bik=ResourceKey.create(Registries.ITEM,PalletsPlus.legacyId("drone_parking_bay"));
-        ITEMS.put("drone_parking_bay",Registry.register(BuiltInRegistries.ITEM,bik,new BlockItem(BAY,new Item.Properties().setId(bik).useBlockDescriptionPrefix())));
+        // Keep the legacy item ID loadable for old saves; creative and
+        // recipes expose only the renamed addon-native Pallet Transfer Node.
+        Registry.register(BuiltInRegistries.ITEM,bik,
+            new BlockItem(BAY,new Item.Properties().setId(bik).useBlockDescriptionPrefix()));
+        var nodeKey=ResourceKey.create(Registries.ITEM,
+            net.minecraft.resources.Identifier.fromNamespaceAndPath(PalletsPlus.MOD_ID,"pallet_transfer_node"));
+        ITEMS.put("pallet_transfer_node",Registry.register(BuiltInRegistries.ITEM,nodeKey,
+            new BlockItem(BAY,new Item.Properties().setId(nodeKey).useBlockDescriptionPrefix())));
         for(int k=1;k<VEHICLES.length;k++){
             String name=VEHICLES[k];
             var key=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId(name+"_model"));
