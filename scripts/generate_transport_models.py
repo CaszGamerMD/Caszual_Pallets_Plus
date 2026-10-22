@@ -314,6 +314,7 @@ for name,label in labels.items():lang[('block.' if name in names+['train_station
 lang['entity.caszual_additions.pallet_transport']='Pallet Transport';langp.write_text(json.dumps(lang,indent=2,ensure_ascii=False)+'\n')
 tag=ROOT/'data/caszual_additions/tags/item/caszual_content.json';tag.parent.mkdir(parents=True,exist_ok=True);obj={'replace':False,'values':[]}
 for name in labels:
+ if name=='pallet_pressure_plate':continue
  val='caszual_additions:'+name
  if val not in obj['values']:obj['values'].append(val)
 # The original legacy item remains in saves, but the searchable native item
@@ -323,6 +324,7 @@ write('assets/caszual_pallets_plus/items/conveyor_t_junction.json',
 tag.write_text(json.dumps(obj,indent=2)+'\n')
 # Survival recipes; module kits each place a complete 3x3 footprint.
 for name in labels:
+ if name=='pallet_pressure_plate':continue
  ingredients={'pallet_rail_index':'minecraft:observer','conveyor_crank':'minecraft:lever','conveyor_hold':'minecraft:iron_bars','conveyor_logic':'minecraft:repeater','train_station_post':'minecraft:redstone_torch','pallet_pressure_plate':'minecraft:heavy_weighted_pressure_plate','pallet_transit_computer':'minecraft:map','conveyor_straight':'minecraft:hopper','conveyor_left':'minecraft:amethyst_shard','conveyor_right':'minecraft:quartz','conveyor_t_junction':'minecraft:dropper','conveyor_up':'minecraft:piston','conveyor_down':'minecraft:sticky_piston','pallet_rail':'minecraft:rail','pallet_rail_left':'minecraft:powered_rail','pallet_rail_right':'minecraft:detector_rail','pallet_engine':'minecraft:furnace','pallet_car':'minecraft:chest','passenger_car':'minecraft:oak_stairs','pallet_drone':'minecraft:ender_pearl','drone_parking_bay':'minecraft:lodestone','transport_controller':'minecraft:comparator','parking_bay_link':'minecraft:ender_eye'}
  write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':('caszual_pallets_plus:' if name=='conveyor_t_junction' else 'caszual_additions:')+name,'count':1}})
 print('Generated 13 modular guideways and transit control furniture, 4 vehicle models, controller, recipes and discovery tags.')
