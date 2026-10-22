@@ -61,14 +61,14 @@ public abstract class PalletPlateRenderingMixin {
                 }
             }
         }
-        ((PalletPlateRenderOffset)state).palletsplus$setLandingOffset(offset);
+        ((PalletPlateRenderOffset)(Object)state).palletsplus$setLandingOffset(offset);
     }
     @Inject(method="submit",at=@At("HEAD"))
     private void palletsplus$before(PalletBlockEntityRenderState state,
             PoseStack poseStack,SubmitNodeCollector collector,
             CameraRenderState camera,CallbackInfo ci){
         poseStack.pushPose();
-        poseStack.translate(0,((PalletPlateRenderOffset)state).palletsplus$landingOffset(),0);
+        poseStack.translate(0,((PalletPlateRenderOffset)(Object)state).palletsplus$landingOffset(),0);
     }
     @Inject(method="submit",at=@At("TAIL"))
     private void palletsplus$after(PalletBlockEntityRenderState state,
