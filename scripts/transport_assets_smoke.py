@@ -25,7 +25,7 @@ for name in names+['train_station_post','pallet_transit_computer','pallet_engine
     recipes.add(signature)
 for name in names:
     states=json.loads((assets/f'blockstates/{name}.json').read_text())['variants']
-    assert len(states)==(72 if name=="conveyor_hold" else 108 if name=="conveyor_t_junction" else 36),name
+    assert len(states)==(72 if name=="conveyor_hold" else 108 if name=="conveyor_t_junction" else 72 if name=="drone_parking_bay" else 36),name
     for variant in states.values():assert (assets/('models/'+variant['model'].split(':')[1]+'.json')).exists(),name
 print('Transport assets: model bounds, 36-state modules, item references and unique recipes passed.')
 
@@ -33,3 +33,12 @@ native=json.loads((assets.parent/'caszual_pallets_plus/items/conveyor_t_junction
 assert native['model']['model']=='caszual_additions:block/transport/conveyor_t_junction_item'
 t_recipe=json.loads((root/'data/caszual_additions/recipe/conveyor_t_junction.json').read_text())
 assert t_recipe['result']['id']=='caszual_pallets_plus:conveyor_t_junction'
+node_item=json.loads((assets.parent/'caszual_pallets_plus/items/pallet_transfer_node.json').read_text())
+assert node_item['model']['model']=='caszual_additions:block/transport/drone_parking_bay_item'
+node_recipe=json.loads((root/'data/caszual_additions/recipe/drone_parking_bay.json').read_text())
+assert node_recipe['result']['id']=='caszual_pallets_plus:pallet_transfer_node'
+node_states=json.loads((assets/'blockstates/drone_parking_bay.json').read_text())['variants']
+assert 'facing=north,part=4,outlet=0' in node_states and 'facing=north,part=4,outlet=1' in node_states
+for role in (0,1):
+  part=json.loads((models/f'drone_parking_bay_4_role{role}.json').read_text())
+  assert len(part['elements'])>=4

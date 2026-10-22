@@ -20,7 +20,7 @@ public final class GuidewayBlock extends Block implements EntityBlock {
     public static final EnumProperty<Direction> FACING=BlockStateProperties.HORIZONTAL_FACING;
     public static final BooleanProperty POWERED=BlockStateProperties.POWERED;
     public static final IntegerProperty PART=IntegerProperty.create("part",0,8);
-    /** Only T-junctions use nonzero values; persisted on all nine cells. */
+    /** T-junction uses 0..2; Pallet Transfer Node uses 0=OUTPUT, 1=INPUT. */
     public static final IntegerProperty OUTLET=IntegerProperty.create("outlet",0,2);
     public final String kind;
     private boolean removing;
@@ -47,7 +47,7 @@ public final class GuidewayBlock extends Block implements EntityBlock {
             if(!l.hasChunkAt(c))return false;
             BlockState a=l.getBlockState(c);
             if(a.getBlock()!=s.getBlock()||a.getValue(PART)!=i||a.getValue(FACING)!=s.getValue(FACING)||
-                (s.getBlock() instanceof GuidewayBlock way&&way.junction()&&a.getValue(OUTLET)!=s.getValue(OUTLET)))return false;
+                (s.getBlock() instanceof GuidewayBlock way&&(way.junction()||way.bay())&&a.getValue(OUTLET)!=s.getValue(OUTLET)))return false;
         }return true;
     }
     @Override public BlockState getStateForPlacement(BlockPlaceContext c){
@@ -111,11 +111,11 @@ public final class GuidewayBlock extends Block implements EntityBlock {
         return net.minecraft.world.InteractionResult.PASS;
     }
     @Override protected net.minecraft.world.InteractionResult useWithoutItem(BlockState s,Level l,BlockPos p,net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit){
-        // Some modded interaction paths fall through even with the tool
-        // still held. Never toggle INPUT/OUTPUT in that case.
-        if(bay()&&(player.getMainHandItem().getItem() instanceof ParkingBayLink ||
-                    player.getOffhandItem().getItem() instanceof ParkingBayLink))
-            return net.minecraft.world.InteractionResult.PASS;
+        // This callback is invoked ONLY when the selected interaction hand
+        // actually contains no item. A link tool in the OFFHAND must not
+        // suppress empty MAIN-hand role changes. Item use has its own
+        // higher-priority ParkingBayLink callback; do not read either
+        // hand here or empty clicks become inert.
         if(bay()){
             if(l instanceof ServerLevel server)
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(DroneBayRoutes.mode(server,root(p,s))));

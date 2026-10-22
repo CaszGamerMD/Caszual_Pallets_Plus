@@ -90,6 +90,48 @@ public final class TransportVehicle extends PathfinderMob {
     }
     public boolean load(ServerLevel l,BlockPos p){if(kind()!=0&&!stationary())return false;for(int i=0;i<capacity();i++)if(cargo[i].empty()&&cargo[i].lift(l,p)){sync();return true;}return false;}
     public boolean unload(ServerLevel l,BlockPos p,Direction d){if(!stationary())return false;for(int i=0;i<capacity();i++)if(!cargo[i].empty()){boolean ok=cargo[i].place(l,p,d);sync();return ok;}return false;}
+    /** Transport must be in the node's actual neighboring carrier bay.
+     * Flatbeds must stop; conveyor carriers can be transferred while they
+     * are still running. Never dispatch pushers to engines or drones. */
+    public boolean canNodeTransfer(boolean loading){
+        if(kind()!=0&&kind()!=2)return false;
+        if(kind()==2&&!stationary())return false;
+        if(loading)return freePalletSlot()>=0;
+        return hasCargo();
+    }
+    /** Rack-origin two-Golem transport: a real named Storage Golem holds
+     * the complete wrapped deck and 216 slots until a nearby EMPTY train
+     * or conveyor carrier accepts sole ownership in this server tick.
+     * No intermediate invisible node inventory or second pallet is made. */
+    public boolean loadFromNodeGolem(ServerLevel level,
+            com.caszgamermd.caszualadditions.racks.StorageGolem leader){
+        if(leader==null||!leader.holdsPallet()||!canNodeTransfer(true))
+            return false;
+        int slot=freePalletSlot();
+        if(slot<0||!cargo[slot].empty())return false;
+        net.minecraft.world.item.ItemStack deck=leader.palletForTransfer();
+        net.minecraft.core.NonNullList<net.minecraft.world.item.ItemStack> stock=
+            leader.palletContentsForTransfer();
+        if(deck.isEmpty()||stock.size()!=216)return false;
+        cargo[slot].deck=deck.copyWithCount(1);
+        for(int i=0;i<216;i++)cargo[slot].items.set(i,stock.get(i).copy());
+        sync();
+        // Source rack was already cleared only after leader accepted it.
+        // Once a vehicle is sole owner, clear leader's escrow.
+        leader.relinquishPalletToRig();
+        return true;
+    }
+    public boolean unloadOntoNode(ServerLevel level,BlockPos node){
+        if(!canNodeTransfer(false)||!DroneBayRoutes.valid(level,node)
+                ||DroneBayCargo.occupied(level,node))return false;
+        for(int i=0;i<capacity();i++){
+            if(cargo[i].empty())continue;
+            if(!DroneBayCargo.deposit(level,node,cargo[i]))return false;
+            sync();
+            return true;
+        }
+        return false;
+    }
     public boolean transferTo(TransportVehicle other){
         if(other==this||!stationary()||!other.stationary()||distanceToSqr(other)>144)return false;
         for(int source=0;source<capacity();source++)if(!cargo[source].empty()){
@@ -246,6 +288,13 @@ public final class TransportVehicle extends PathfinderMob {
             // continuing along the rail, without changing inventory owner
             // until the atomic ground lift succeeds.
             BlockPos source=DroneBayCargo.nextToConveyor(l,node);
+            // Linked warehouse transfer nodes use the REAL two-Golem push
+            // team. Do not silently steal a pallet before they arrive.
+            if(source!=null){
+                BlockPos center=source.offset(1,-1,1);
+                var linked=DroneBayRoutes.get(l,center);
+                if(linked!=null&&linked.warehouse()!=null)source=null;
+            }
             if(source!=null&&cargo[0].lift(l,source)){
                 status="Picked up wrapped pallet from Parking Bay";
                 sync();
@@ -280,6 +329,10 @@ public final class TransportVehicle extends PathfinderMob {
      * of the 3x3 Parking Bay. No pressure plate or virtual buffer remains. */
     public boolean landOnParkingBay(ServerLevel level,BlockPos bay){
         if(kind()!=0||!isAlive()||cargo[0].empty())return false;
+        // Warehouses use two real walking pushers to unload onto INPUT
+        // nodes; keep carrier cargo intact until their atomic transfer.
+        var linked=DroneBayRoutes.get(level,bay);
+        if(linked!=null&&linked.warehouse()!=null)return false;
         if(!DroneBayCargo.deposit(level,bay,cargo[0]))return false;
         running=false;traveling=false;status="Pallet delivered onto Parking Bay";
         sync();discard();return true;

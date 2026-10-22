@@ -42,16 +42,16 @@ public final class ParkingBayLink extends Item {
         BlockPos pos=c.getClickedPos();var state=l.getBlockState(pos);
         if(player.isShiftKeyDown()){
             held.set(DataComponents.CUSTOM_DATA,CustomData.EMPTY);
-            player.sendSystemMessage(Component.literal("Parking Bay Link selection cleared."));
+            player.sendSystemMessage(Component.literal("Pallet Transfer Link selection cleared."));
             return InteractionResult.SUCCESS;
         }
         String dim=l.dimension().identifier().toString(),response;
         if(state.is(RackContent.RACK_COMPUTER)){
             t.putString("dimension",dim);t.putString("choose","warehouse");t.putLong("source",pos.asLong());
-            response="Rack Computer selected. Click a Drone Parking Bay to attach it to this warehouse.";
+            response="Rack Computer selected. Click a Pallet Transfer Node to attach it to this warehouse.";
         }else if(state.is(TransportContent.BAY)){
             BlockPos root=GuidewayBlock.root(pos,state);
-            if(!DroneBayRoutes.valid(l,root)){response="Complete the 3x3 Drone Parking Bay first.";}
+            if(!DroneBayRoutes.valid(l,root)){response="Complete the 3x3 Pallet Transfer Node first.";}
             else if(dim.equals(t.getStringOr("dimension",""))&&"warehouse".equals(t.getStringOr("choose",""))){
                 response=DroneBayRoutes.warehouse(l,root,BlockPos.of(t.getLongOr("source",0)),player.getUUID().toString());
                 if(response.startsWith("Bay connected"))t.remove("choose");
@@ -60,10 +60,10 @@ public final class ParkingBayLink extends Item {
                 if(response.startsWith("Air route linked")){t.remove("choose");t.remove("source");}
             }else{
                 var bay=DroneBayRoutes.get(l,root);
-                if(bay==null||bay.input())response="Select an OUTPUT bay first; empty-hand click a bay to toggle INPUT/OUTPUT.";
+                if(bay==null||bay.input())response="Select an OUTPUT node first; empty-hand click a node to toggle INPUT/OUTPUT.";
                 else{
                     t.putString("dimension",dim);t.putString("choose","output");t.putLong("source",root.asLong());
-                    response="OUTPUT bay selected. Travel to the destination INPUT bay and click it, even when the source chunk unloads.";
+                    response="OUTPUT node selected. Travel to the destination INPUT node and click it, even when the source chunk unloads.";
                 }
             }
         }else{return InteractionResult.PASS;}

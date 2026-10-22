@@ -48,13 +48,30 @@ public final class DroneBayRoutes {
             if(other.kind()==4&&other.flightActive())return "Wait until the drone finishes its trip.";
         JsonObject o=edit(level,root);boolean input="output".equals(text(o,"mode","output"));
         o.addProperty("mode",input?"input":"output");
+        refreshMarker(level,root,input);
         // A changed role invalidates existing routes to avoid reverse shipments.
         o.remove("linked");
         for(var entry:TransitWorldData.get(level).stations.values())
             if(pos(entry,"linked")!=null&&root.equals(pos(entry,"linked")))entry.remove("linked");
         TransitWorldData.get(level).setDirty();
-        return "Drone Parking Bay: "+(input?"INPUT (receives pallets)":"OUTPUT (sends pallets)")+
+        return "Pallet Transfer Node: "+(input?"INPUT (I — receives pallets)":"OUTPUT (O — sends pallets)")+
             ". Use the Parking Bay Link tool to connect an OUTPUT to an INPUT.";
+    }
+    /** Mirror persistent node role onto all nine block states for the
+     * top-face I/O decal. Existing saves default to OUTPUT (O); the
+     * controller can reconcile older nodes after loading without rotation
+     * or loss of their saved cargo/warehouse links. */
+    public static void refreshMarker(ServerLevel level,BlockPos root,boolean input){
+        if(!valid(level,root))return;
+        var center=level.getBlockState(root);
+        Direction facing=center.getValue(GuidewayBlock.FACING);
+        int marker=input?1:0;
+        for(int i=0;i<9;i++){
+            BlockPos tile=GuidewayBlock.cell(root,facing,i);
+            var state=level.getBlockState(tile);
+            if(state.getValue(GuidewayBlock.OUTLET)!=marker)
+                level.setBlock(tile,state.setValue(GuidewayBlock.OUTLET,marker),2);
+        }
     }
     public static String warehouse(ServerLevel level,BlockPos root,BlockPos computer,String owner){
         if(!valid(level,root))return "The bay is incomplete.";
