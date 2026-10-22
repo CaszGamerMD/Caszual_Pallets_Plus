@@ -3,5 +3,6 @@
   "package": "com.caszgamermd.palletsplus.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": ["MovingPalletTransportMixin"],
+  "client": ["PalletRenderStateMixin", "PalletPlateRenderingMixin"],
   "injectors": {"defaultRequire": 1}
 }
