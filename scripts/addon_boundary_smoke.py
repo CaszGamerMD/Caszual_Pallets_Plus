@@ -15,6 +15,9 @@ with zipfile.ZipFile(jar) as z:
     assert 'assets/caszual_additions/blockstates/conveyor_left.json' in names
     assert 'assets/caszual_additions/blockstates/conveyor_t_junction.json' in names
     assert 'assets/caszual_pallets_plus/items/conveyor_t_junction.json' in names
+    assert 'assets/caszual_pallets_plus/items/pallet_transfer_node.json' in names
+    node_recipe=json.loads(z.read('data/caszual_additions/recipe/drone_parking_bay.json'))
+    assert node_recipe['result']['id']=='caszual_pallets_plus:pallet_transfer_node'
     assert 'data/caszual_additions/recipe/conveyor_t_junction.json' in names
     recipe=json.loads(z.read('data/caszual_additions/recipe/conveyor_t_junction.json'))
     assert recipe['result']['id']=='caszual_pallets_plus:conveyor_t_junction'
