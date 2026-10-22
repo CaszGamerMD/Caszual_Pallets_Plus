@@ -23,7 +23,16 @@ public final class NodePushBridge {
             return false;
         var bay=DroneBayRoutes.get(level,node);
         if(bay==null||(loading&&!bay.output())||(!loading&&!bay.input()))return false;
-        if(loading)return DroneBayCargo.find(level,node)!=null;
+        if(loading){
+            if(DroneBayCargo.find(level,node)!=null)return true;
+            // Empty OUTPUT node can request an original pallet from a
+            // connected warehouse's loaded OUTPUT aisle rack. This avoids
+            // the previous deadlock where no two-Golem crew was dispatched
+            // until the player manually placed a pallet on the node.
+            return !DroneBayCargo.occupied(level,node)&&bay.warehouse()!=null
+                &&!com.caszgamermd.caszualadditions.racks.WarehouseAislePriority
+                    .stagedOutputRacks(level,bay.warehouse()).isEmpty();
+        }
         return !DroneBayCargo.occupied(level,node);
     }
     public static TransportVehicle adjacentVehicle(ServerLevel level,BlockPos node,boolean loading){
@@ -56,6 +65,25 @@ public final class NodePushBridge {
                 loading,node,vehicleId,vehicle.canNodeTransfer(loading),
                 DroneBayCargo.find(level,node));
         return done;
+    }
+    /** The golem team retrieves one physical pallet from a warehouse
+     * OUTPUT aisle rack, then walks it to the node and finally loads the
+     * actually adjacent carriage. The leader retains all contents if the
+     * vehicle departed, became full or changed direction meanwhile. */
+    public static boolean completeFromCrew(ServerLevel level,BlockPos node,UUID vehicleId,
+            com.caszgamermd.caszualadditions.racks.StorageGolem leader){
+        if(!DroneBayRoutes.valid(level,node)||DroneBayCargo.occupied(level,node)
+                ||leader==null||!leader.holdsPallet())return false;
+        var bay=DroneBayRoutes.get(level,node);
+        if(bay==null||!bay.output())return false;
+        TransportVehicle vehicle=level.getEntity(vehicleId) instanceof TransportVehicle v?v:null;
+        if(vehicle==null)
+            for(var v:level.getEntitiesOfClass(TransportVehicle.class,
+                    new AABB(node).inflate(6,4,6)))
+                if(v.getUUID().equals(vehicleId)){vehicle=v;break;}
+        if(vehicle==null||!adjacent(node,vehicle)||!vehicle.canNodeTransfer(true))
+            return false;
+        return vehicle.loadFromNodeGolem(level,leader);
     }
     private NodePushBridge(){}
 }
