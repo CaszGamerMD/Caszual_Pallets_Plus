@@ -208,11 +208,16 @@ public final class TransportChecks implements ModInitializer {
         if(!DroneBayCargo.deposit(level,pushOutput,load))
             throw new AssertionError("Cannot stage OUTPUT node for two-Golem pushing test");
         TransportVehicle flatbed=vehicle(level,2,58,20,20.5);
-        if(!NodePushBridge.eligible(level,pushOutput,flatbed,true)
-                ||!NodePushBridge.complete(level,pushOutput,flatbed.getUUID(),true)
-                ||DroneBayCargo.find(level,pushOutput)!=null
+        boolean readyOutput=NodePushBridge.eligible(level,pushOutput,flatbed,true);
+        boolean pushResult=readyOutput&&NodePushBridge.complete(level,pushOutput,flatbed.getUUID(),true);
+        if(!pushResult||DroneBayCargo.find(level,pushOutput)!=null
                 ||flatbed.cargo[0].items.get(0).getCount()!=37)
-            throw new AssertionError("Two-Golem OUTPUT node did not atomically push to adjacent flatbed");
+            throw new AssertionError("Two-Golem OUTPUT node push failed: eligible="+readyOutput
+                +" result="+pushResult+" cargo="+flatbed.cargo[0].items.get(0).getCount()
+                +" flatbed="+flatbed.getUUID()+" available="+flatbed.canNodeTransfer(true)
+                +" pallet="+DroneBayCargo.find(level,pushOutput)
+                +" mode="+DroneBayRoutes.get(level,pushOutput)
+                +" pos="+flatbed.position());
         BlockPos pushInput=new BlockPos(55,64,26);
         bay(level,pushInput);
         DroneBayRoutes.mode(level,pushInput);
