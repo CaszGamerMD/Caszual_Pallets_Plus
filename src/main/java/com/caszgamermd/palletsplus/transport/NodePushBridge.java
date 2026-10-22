@@ -40,10 +40,22 @@ public final class NodePushBridge {
      * separate push positions. The ground pallet has exactly one owner
      * before and after the atomic transfer. No replacement is created. */
     public static boolean complete(ServerLevel level,BlockPos node,UUID vehicleId,boolean loading){
-        if(!(level.getEntity(vehicleId) instanceof TransportVehicle vehicle)
-                ||!eligible(level,node,vehicle,loading))return false;
-        if(loading)return vehicle.load(level,DroneBayCargo.root(node));
-        return vehicle.unloadOntoNode(level,node);
+        TransportVehicle vehicle=level.getEntity(vehicleId) instanceof TransportVehicle result?result:null;
+        // Newly spawned/migrated entities can be visible in a chunk before
+        // the UUID lookup resolves. The short loaded-area scan never reaches
+        // into other chunks or matches a different transport.
+        if(vehicle==null)
+            for(var candidate:level.getEntitiesOfClass(TransportVehicle.class,
+                    new AABB(node).inflate(6,4,6)))
+                if(candidate.getUUID().equals(vehicleId)){vehicle=candidate;break;}
+        if(!eligible(level,node,vehicle,loading))return false;
+        boolean done=loading?vehicle.load(level,DroneBayCargo.root(node)):
+                vehicle.unloadOntoNode(level,node);
+        if(!done)org.slf4j.LoggerFactory.getLogger("PalletNodePush").warn(
+                "Transfer deferred: loading={} source={} vehicle={} stationaryReady={} sourceWrapped={}",
+                loading,node,vehicleId,vehicle.canNodeTransfer(loading),
+                DroneBayCargo.find(level,node));
+        return done;
     }
     private NodePushBridge(){}
 }
