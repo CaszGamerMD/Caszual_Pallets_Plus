@@ -176,6 +176,12 @@ public final class TransportChecks implements ModInitializer {
         blockedPlateArrival.sync();
         // Opposite direction: an unloaded conveyor next to an OUTPUT bay
         // must be able to take the original inventory from the real deck.
+        // x=84 lives in chunk 5, beyond the original smoke fixture's
+        // forced x=0..4. Without tickets the carrier never ticks and
+        // falsely looks like a bay-to-conveyor transfer failure.
+        for(int chunkZ=-1;chunkZ<=0;chunkZ++){
+            level.setChunkForced(5,chunkZ,true);level.getChunk(5,chunkZ);
+        }
         BlockPos feederBay=new BlockPos(84,64,3);
         bay(level,feederBay);
         module(level,new BlockPos(84,64,0),"conveyor_straight");
