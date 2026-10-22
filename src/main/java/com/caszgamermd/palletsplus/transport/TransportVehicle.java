@@ -90,6 +90,26 @@ public final class TransportVehicle extends PathfinderMob {
     }
     public boolean load(ServerLevel l,BlockPos p){if(kind()!=0&&!stationary())return false;for(int i=0;i<capacity();i++)if(cargo[i].empty()&&cargo[i].lift(l,p)){sync();return true;}return false;}
     public boolean unload(ServerLevel l,BlockPos p,Direction d){if(!stationary())return false;for(int i=0;i<capacity();i++)if(!cargo[i].empty()){boolean ok=cargo[i].place(l,p,d);sync();return ok;}return false;}
+    /** Transport must be in the node's actual neighboring carrier bay.
+     * Flatbeds must stop; conveyor carriers can be transferred while they
+     * are still running. Never dispatch pushers to engines or drones. */
+    public boolean canNodeTransfer(boolean loading){
+        if(kind()!=0&&kind()!=2)return false;
+        if(kind()==2&&!stationary())return false;
+        if(loading)return freePalletSlot()>=0;
+        return hasCargo();
+    }
+    public boolean unloadOntoNode(ServerLevel level,BlockPos node){
+        if(!canNodeTransfer(false)||!DroneBayRoutes.valid(level,node)
+                ||DroneBayCargo.occupied(level,node))return false;
+        for(int i=0;i<capacity();i++){
+            if(cargo[i].empty())continue;
+            if(!DroneBayCargo.deposit(level,node,cargo[i]))return false;
+            sync();
+            return true;
+        }
+        return false;
+    }
     public boolean transferTo(TransportVehicle other){
         if(other==this||!stationary()||!other.stationary()||distanceToSqr(other)>144)return false;
         for(int source=0;source<capacity();source++)if(!cargo[source].empty()){
