@@ -99,6 +99,28 @@ public final class TransportVehicle extends PathfinderMob {
         if(loading)return freePalletSlot()>=0;
         return hasCargo();
     }
+    /** Rack-origin two-Golem transport: a real named Storage Golem holds
+     * the complete wrapped deck and 216 slots until a nearby EMPTY train
+     * or conveyor carrier accepts sole ownership in this server tick.
+     * No intermediate invisible node inventory or second pallet is made. */
+    public boolean loadFromNodeGolem(ServerLevel level,
+            com.caszgamermd.caszualadditions.racks.StorageGolem leader){
+        if(leader==null||!leader.holdsPallet()||!canNodeTransfer(true))
+            return false;
+        int slot=freePalletSlot();
+        if(slot<0||!cargo[slot].empty())return false;
+        net.minecraft.world.item.ItemStack deck=leader.palletForTransfer();
+        net.minecraft.core.NonNullList<net.minecraft.world.item.ItemStack> stock=
+            leader.palletContentsForTransfer();
+        if(deck.isEmpty()||stock.size()!=216)return false;
+        cargo[slot].deck=deck.copyWithCount(1);
+        for(int i=0;i<216;i++)cargo[slot].items.set(i,stock.get(i).copy());
+        sync();
+        // Source rack was already cleared only after leader accepted it.
+        // Once a vehicle is sole owner, clear leader's escrow.
+        leader.relinquishPalletToRig();
+        return true;
+    }
     public boolean unloadOntoNode(ServerLevel level,BlockPos node){
         if(!canNodeTransfer(false)||!DroneBayRoutes.valid(level,node)
                 ||DroneBayCargo.occupied(level,node))return false;
