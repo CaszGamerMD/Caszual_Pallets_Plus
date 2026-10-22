@@ -33,7 +33,34 @@ public final class CrewTransport {
         UseBlockCallback.EVENT.register((player,level,hand,hit)->{
             if(!player.getItemInHand(hand).is(RackContent.STORAGE_SCANNER_ITEM))return InteractionResult.PASS;
             var state=level.getBlockState(hit.getBlockPos());
-            if(!(state.getBlock() instanceof GuidewayBlock way)||way.rail()||way.bay())return InteractionResult.PASS;
+            if(!(state.getBlock() instanceof GuidewayBlock way)||way.rail())return InteractionResult.PASS;
+            if(way.bay()){
+                // The actual normal ground pallet sits one block ABOVE the
+                // 3x3 parking pad. Scanner users often click the pad itself:
+                // forward that click to the real pallet root for DIRECT
+                // Golem retrieval and FORKLIFT source selection. When
+                // empty, FORKLIFT/Direct target the bay's central 2x2
+                // placement footprint, not an adjacent random block.
+                if(level instanceof ServerLevel server && player instanceof ServerPlayer sp){
+                    BlockPos center=GuidewayBlock.root(hit.getBlockPos(),state);
+                    BlockPos found=DroneBayCargo.find(server,center);
+                    BlockPos clicked=found!=null?found:DroneBayCargo.root(center).below();
+                    if(StorageScannerItem.mode(player.getItemInHand(hand))==
+                            StorageScannerItem.Mode.REMOTE){
+                        sp.sendSystemMessage(Component.literal(
+                            "INPUT Parking Bay uses automatic THREE-Golem pickup without an empty replacement. Use DIRECT or FORKLIFT mode for manual transfer."));
+                    }else{
+                        var destinationHit=new net.minecraft.world.phys.BlockHitResult(
+                            new net.minecraft.world.phys.Vec3(clicked.getX()+.5,
+                                clicked.getY()+.5,clicked.getZ()+.5),
+                            net.minecraft.core.Direction.UP,clicked,false);
+                        var context=new net.minecraft.world.item.context.UseOnContext(
+                            player,hand,destinationHit);
+                        player.getItemInHand(hand).getItem().useOn(context);
+                    }
+                }
+                return InteractionResult.SUCCESS;
+            }
             if(player instanceof ServerPlayer sp&&level instanceof ServerLevel server){
                 String problem=scannerProblem(player.getItemInHand(hand),server);
                 if(!problem.isEmpty()){sp.sendSystemMessage(Component.literal(problem));return InteractionResult.SUCCESS;}
