@@ -266,6 +266,13 @@ public final class TransportVehicle extends PathfinderMob {
             // continuing along the rail, without changing inventory owner
             // until the atomic ground lift succeeds.
             BlockPos source=DroneBayCargo.nextToConveyor(l,node);
+            // Linked warehouse transfer nodes use the REAL two-Golem push
+            // team. Do not silently steal a pallet before they arrive.
+            if(source!=null){
+                BlockPos center=source.offset(1,-1,1);
+                var linked=DroneBayRoutes.get(l,center);
+                if(linked!=null&&linked.warehouse()!=null)source=null;
+            }
             if(source!=null&&cargo[0].lift(l,source)){
                 status="Picked up wrapped pallet from Parking Bay";
                 sync();
@@ -300,6 +307,10 @@ public final class TransportVehicle extends PathfinderMob {
      * of the 3x3 Parking Bay. No pressure plate or virtual buffer remains. */
     public boolean landOnParkingBay(ServerLevel level,BlockPos bay){
         if(kind()!=0||!isAlive()||cargo[0].empty())return false;
+        // Warehouses use two real walking pushers to unload onto INPUT
+        // nodes; keep carrier cargo intact until their atomic transfer.
+        var linked=DroneBayRoutes.get(level,bay);
+        if(linked!=null&&linked.warehouse()!=null)return false;
         if(!DroneBayCargo.deposit(level,bay,cargo[0]))return false;
         running=false;traveling=false;status="Pallet delivered onto Parking Bay";
         sync();discard();return true;
