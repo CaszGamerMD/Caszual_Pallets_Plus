@@ -321,7 +321,12 @@ public final class TransportChecks implements ModInitializer {
                 throw new AssertionError("Occupied Parking Bay consumed or duplicated its conveyor cargo");
             if(conveyorBayPickup.cargo[0].items.get(0).getCount()!=29||
                     DroneBayCargo.find(server.overworld(),new BlockPos(84,64,3))!=null)
-                throw new AssertionError("Conveyor failed atomic pickup from OUTPUT Parking Bay");
+                throw new AssertionError("Conveyor failed atomic pickup from OUTPUT Parking Bay: "+
+                    "cargo="+conveyorBayPickup.cargo[0].items.get(0).getCount()+
+                    " alive="+conveyorBayPickup.isAlive()+
+                    " running="+conveyorBayPickup.transitStatus()+
+                    " source="+DroneBayCargo.find(server.overworld(),new BlockPos(84,64,3))+
+                    " node="+conveyorBayPickup.blockPosition());
             if(recoveredConveyor.getZ()>-6.9||
                 !recoveredConveyor.cargo[0].items.get(0).is(net.minecraft.world.item.Items.DIAMOND))
                 throw new AssertionError("Recovered conveyor failed to resume moving with intact cargo");
