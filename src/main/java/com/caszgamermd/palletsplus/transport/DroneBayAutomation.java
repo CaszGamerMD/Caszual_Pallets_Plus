@@ -32,6 +32,11 @@ public final class DroneBayAutomation {
     }
     private static BlockPos staged(ServerLevel level,BlockPos bay){
         if(!level.hasChunkAt(bay))return null;
+        // First priority: pallet left physically ON the bay by a landed
+        // drone. It is an ordinary wrapped four-cell Caszual pallet with
+        // a real 216-slot root inventory, not a transport entity or item.
+        BlockPos onBay=DroneBayCargo.find(level,bay);
+        if(onBay!=null)return onBay;
         Direction facing=level.getBlockState(bay).getValue(GuidewayBlock.FACING);
         for(Direction d:new Direction[]{facing,facing.getClockWise(),facing.getCounterClockWise(),facing.getOpposite()})
             for(int dy:new int[]{0,1,-1}){
@@ -95,15 +100,34 @@ public final class DroneBayAutomation {
                     // crew with full pallet escrow and rack/PTP destination.
                     // Retry only while target physically exists; its dispatcher
                     // itself refuses duplicate target missions.
-                    if(level.getGameTime()%200==0&&!bay.owner().isEmpty()){
+                    if(level.getGameTime()%40==0&&!bay.owner().isEmpty()){
+                        // Ask the linked warehouse to send its existing
+                        // four-Golem remote pickup crew. The pallet remains
+                        // on the bay until a real crew actually lifts it;
+                        // RemotePalletDispatch prevents duplicate missions
+                        // and returns the shipment to warehouse INPUT stock.
                         try{
                             UUID owner=UUID.fromString(bay.owner());
                             ServerPlayer player=level.getServer().getPlayerList().getPlayer(owner);
-                            if(player!=null)RemotePalletDispatch.request(level,player,bay.warehouse(),cargo);
-                        }catch(IllegalArgumentException ignored){}
+                            if(player!=null){
+                                String result=RemotePalletDispatch.request(level,player,bay.warehouse(),cargo);
+                                if(!result.equals(record.has("dispatch")?record.get("dispatch").getAsString():"")){
+                                    record.addProperty("dispatch",result);
+                                    data.setDirty();
+                                }
+                            }else if(!record.has("dispatch")||!record.get("dispatch").getAsString().contains("offline")){
+                                record.addProperty("dispatch","Warehouse owner offline — pallet waiting safely on INPUT bay");
+                                data.setDirty();
+                            }
+                        }catch(IllegalArgumentException ignored){
+                            record.addProperty("dispatch","Invalid warehouse link owner — pallet waiting safely on INPUT bay");
+                            data.setDirty();
+                        }
                     }
                 }else if(cargo==null&&record.has("requested")&&record.get("requested").getAsBoolean()){
-                    record.addProperty("requested",false);data.setDirty();
+                    record.addProperty("requested",false);
+                    record.remove("dispatch");
+                    data.setDirty();
                 }
             }
         }
