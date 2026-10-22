@@ -56,13 +56,20 @@ public abstract class PalletPlateRenderingMixin {
                     }
                 }
                 if(complete){
-                    // Root y is exactly one block above the plate. Once the
-                    // 2x2 pressure plate is powered its top is 1/16 high.
-                    // Pallet model runners start at +0.035, so lower all
-                    // boards, wrap and item cargo by this exact distance.
+                    // Pallet runners rest right on the thin pressure plate.
                     boolean down=level.getBlockState(pad).getValue(PalletPlateBlock.POWERED);
                     offset=PalletPlateLandingY.offset(down);
                 }
+            }
+            if(offset==0){
+                // Drone cargo occupies the central 2x2 footprint of a 3x3
+                // bay. Preserve the actual pallet block entity so Additions
+                // Golems can lift it; offset only the client render mesh.
+                BlockPos bay=blockEntity.getBlockPos().offset(1,-1,1);
+                if(level.hasChunksAt(bay.offset(-1,0,-1),bay.offset(1,0,1))
+                        &&com.caszgamermd.palletsplus.transport.GuidewayBlock.complete(level,bay)
+                        &&level.getBlockState(bay).is(TransportContent.BAY))
+                    offset=PalletPlateLandingY.droneBayOffset();
             }
         }
         ((PalletPlateRenderOffset)(Object)state).palletsplus$setLandingOffset(offset);
