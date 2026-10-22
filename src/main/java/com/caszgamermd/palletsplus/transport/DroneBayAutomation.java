@@ -58,6 +58,26 @@ public final class DroneBayAutomation {
                 level.setBlock(tile,state.setValue(GuidewayBlock.POWERED,on),3);
         }
     }
+    /** Optional Additions bridge: keep the Pallets Plus addon compileable
+     * against its already-published dependency. An older Additions runtime
+     * must NOT silently fall back to the replacement-pallet remote exchange.
+     * Inventory stays physically on the INPUT bay until the updated
+     * Additions worker dispatcher is installed. */
+    private static String dispatchNoReplacement(ServerLevel level,DroneBayRoutes.Bay bay,BlockPos cargo){
+        try{
+            UUID owner=UUID.fromString(bay.owner());
+            Class<?> bridge=Class.forName(
+                "com.caszgamermd.caszualadditions.racks.DroneBayNoReplacementDispatch");
+            var dispatch=bridge.getMethod("request",ServerLevel.class,UUID.class,BlockPos.class,BlockPos.class);
+            return (String)dispatch.invoke(null,level,owner,bay.warehouse(),cargo);
+        }catch(ClassNotFoundException|NoSuchMethodException ex){
+            return "WAITING: install Caszual Additions with three-Golem INPUT bay pickup; pallet held safely.";
+        }catch(IllegalArgumentException ex){
+            return "INVALID: warehouse bay link has no valid owner.";
+        }catch(ReflectiveOperationException ex){
+            return "WAITING: Additions input-crew dispatcher unavailable: "+ex.getClass().getSimpleName();
+        }
+    }
     private static void tick(ServerLevel level){
         var data=TransitWorldData.get(level);
         for(JsonObject record:new ArrayList<>(data.stations.values())){
@@ -65,12 +85,13 @@ public final class DroneBayAutomation {
             BlockPos pos=bayPos(record);if(pos==null||!level.hasChunkAt(pos))continue;
             var bay=DroneBayRoutes.get(level,pos);
             if(bay==null||!DroneBayRoutes.valid(level,pos))continue;
-            // Single pulse: raise for one ten-tick pass and then lower. The
-            // request latch only resets after the pallet condition changes.
-            if(record.has("pulse")&&record.get("pulse").getAsBoolean()){
-                signal(level,pos,false);record.addProperty("pulse",false);data.setDirty();
-            }
-            BlockPos cargo=staged(level,pos);
+            // Physical redstone presence sensor: stay powered as LONG as
+            // a wrapped pallet stands on the Parking Bay, not just for a
+            // single request tick. Golems and forklifts clearing it switch
+            // the level back off at the next sensor poll.
+            BlockPos onBay=DroneBayCargo.find(level,pos);
+            signal(level,pos,onBay!=null);
+            BlockPos cargo=bay.input()?onBay:staged(level,pos);
             if(bay.output()){
                 if(bay.linked()!=null&&DroneBayRoutes.receiverReady(level,bay.linked())){
                     var drones=level.getEntitiesOfClass(TransportVehicle.class,
@@ -79,9 +100,9 @@ public final class DroneBayAutomation {
                 }
                 if(cargo==null&&warehouseReady(level,bay)){
                     if(!record.has("requested")||!record.get("requested").getAsBoolean()){
-                        record.addProperty("requested",true);record.addProperty("pulse",true);
+                        record.addProperty("requested",true);
                         record.addProperty("request","OUTPUT_AISLE_PALLET");
-                        signal(level,pos,true);data.setDirty();
+                        data.setDirty();
                         // A fresh warehouse request is sent only once for this
                         // empty-bay condition. The attached warehouse network
                         // may be serviced by connected automation or Golems.
@@ -93,34 +114,21 @@ public final class DroneBayAutomation {
                 if(cargo!=null&&warehouseReady(level,bay)){
                     if(!record.has("requested")||!record.get("requested").getAsBoolean()){
                         record.addProperty("requested",true);record.addProperty("pulse",true);
-                        record.addProperty("request","REMOTE_PICKUP_TO_INPUT_RACK_OR_PTP");
-                        signal(level,pos,true);data.setDirty();
+                        record.addProperty("request","THREE_GOLEM_PICKUP_NO_REPLACEMENT_TO_INPUT_RACK");
+                        data.setDirty();
                     }
                     // Existing Additions REMOTE dispatch is a real four-golem
                     // crew with full pallet escrow and rack/PTP destination.
                     // Retry only while target physically exists; its dispatcher
                     // itself refuses duplicate target missions.
                     if(level.getGameTime()%40==0&&!bay.owner().isEmpty()){
-                        // Ask the linked warehouse to send its existing
-                        // four-Golem remote pickup crew. The pallet remains
-                        // on the bay until a real crew actually lifts it;
-                        // RemotePalletDispatch prevents duplicate missions
-                        // and returns the shipment to warehouse INPUT stock.
-                        try{
-                            UUID owner=UUID.fromString(bay.owner());
-                            ServerPlayer player=level.getServer().getPlayerList().getPlayer(owner);
-                            if(player!=null){
-                                String result=RemotePalletDispatch.request(level,player,bay.warehouse(),cargo);
-                                if(!result.equals(record.has("dispatch")?record.get("dispatch").getAsString():"")){
-                                    record.addProperty("dispatch",result);
-                                    data.setDirty();
-                                }
-                            }else if(!record.has("dispatch")||!record.get("dispatch").getAsString().contains("offline")){
-                                record.addProperty("dispatch","Warehouse owner offline — pallet waiting safely on INPUT bay");
-                                data.setDirty();
-                            }
-                        }catch(IllegalArgumentException ignored){
-                            record.addProperty("dispatch","Invalid warehouse link owner — pallet waiting safely on INPUT bay");
+                        // An INPUT bay uses three independently walking
+                        // Golems. The existing four-Golem REMOTE EXCHANGE
+                        // would place an unwanted replacement deck here.
+                        String result=dispatchNoReplacement(level,bay,cargo);
+                        String before=record.has("dispatch")?record.get("dispatch").getAsString():"";
+                        if(!result.equals(before)){
+                            record.addProperty("dispatch",result);
                             data.setDirty();
                         }
                     }
