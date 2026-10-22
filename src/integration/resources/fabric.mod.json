@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"palletsplus_integration","version":"1.0.0","name":"Pallets Plus integration checks (development only)","environment":"server","entrypoints":{"main":["com.caszgamermd.palletsplus.checks.TransportChecks"]},"depends":{"caszual_pallets_plus":"*"}}
