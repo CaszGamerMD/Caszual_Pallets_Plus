@@ -19,6 +19,7 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Desc;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -29,7 +30,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * visually seats the original pallet right on the activated plate. */
 @Mixin(value=PalletBlockEntityRenderer.class,remap=false)
 public abstract class PalletPlateRenderingMixin {
-    @Inject(method="extractRenderState",at=@At("TAIL"))
+    @Inject(target=@Desc(value="extractRenderState",args={
+            PalletBlockEntity.class,PalletBlockEntityRenderState.class,
+            float.class,Vec3.class,ModelFeatureRenderer.CrumblingOverlay.class}),
+            at=@At("TAIL"))
     private void palletsplus$plateLanding(PalletBlockEntity blockEntity,
             PalletBlockEntityRenderState state,float partialTicks,
             Vec3 cameraPosition,
@@ -63,14 +67,18 @@ public abstract class PalletPlateRenderingMixin {
         }
         ((PalletPlateRenderOffset)(Object)state).palletsplus$setLandingOffset(offset);
     }
-    @Inject(method="submit",at=@At("HEAD"))
+    @Inject(target=@Desc(value="submit",args={
+            PalletBlockEntityRenderState.class,PoseStack.class,
+            SubmitNodeCollector.class,CameraRenderState.class}),at=@At("HEAD"))
     private void palletsplus$before(PalletBlockEntityRenderState state,
             PoseStack poseStack,SubmitNodeCollector collector,
             CameraRenderState camera,CallbackInfo ci){
         poseStack.pushPose();
         poseStack.translate(0,((PalletPlateRenderOffset)(Object)state).palletsplus$landingOffset(),0);
     }
-    @Inject(method="submit",at=@At("TAIL"))
+    @Inject(target=@Desc(value="submit",args={
+            PalletBlockEntityRenderState.class,PoseStack.class,
+            SubmitNodeCollector.class,CameraRenderState.class}),at=@At("TAIL"))
     private void palletsplus$after(PalletBlockEntityRenderState state,
             PoseStack poseStack,SubmitNodeCollector collector,
             CameraRenderState camera,CallbackInfo ci){
