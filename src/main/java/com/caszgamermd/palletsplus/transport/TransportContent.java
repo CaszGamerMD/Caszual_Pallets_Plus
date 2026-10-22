@@ -38,7 +38,15 @@ public final class TransportContent {
                 new Item.Properties().setId(tKey).useBlockDescriptionPrefix())));
         LOGIC_ENTITY=Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,PalletsPlus.legacyId("logic_conveyor"),net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(LogicConveyorEntity::new,WAYS.get("conveyor_logic")).build());
         STATION=block("train_station_post",StationPostBlock::new);
-        PLATE=block("pallet_pressure_plate",PalletPlateBlock::new);
+        // Only retain the BLOCK registry ID for existing world saves.
+        // There is intentionally no pressure-plate item registration,
+        // creative entry, JEI recipe or pallet handoff behavior.
+        var legacyPlateKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("pallet_pressure_plate"));
+        PLATE=Registry.register(BuiltInRegistries.BLOCK,legacyPlateKey,
+            new PalletPlateBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
+                .strength(4).noOcclusion()
+                .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
+                .setId(legacyPlateKey)));
         COMPUTER=block("pallet_transit_computer",TransitComputerBlock::new);
         DroneChunkLoading.initialize();DroneBayAutomation.initialize();TransitNet.initialize();
         var bayKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("drone_parking_bay"));

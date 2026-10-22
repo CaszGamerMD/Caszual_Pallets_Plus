@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone,recoveredConveyor,plateArrival,blockedPlateArrival;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone,recoveredConveyor,plateArrival,blockedPlateArrival,conveyorBayPickup;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -147,11 +147,11 @@ public final class TransportChecks implements ModInitializer {
                 recoveredAt=pallet.getBlockPos();
         }
         if(recoveredAt==null)throw new AssertionError("Emergency salvage lost pallet contents");
-        // Terminal conveyor unloads to an adjacent 2x2 pressure plate,
-        // using a REAL wrapped Caszual pallet and its full shared inventory.
-        BlockPos goodPad=new BlockPos(71,64,-3);
+        // New universal 3x3 Parking Bays REPLACE the retired 2x2 plate.
+        // Cargo remains a real wrapped 216-slot pallet on the bay's deck.
+        BlockPos goodPad=new BlockPos(72,64,-3);
         module(level,new BlockPos(72,64,0),"conveyor_straight");
-        plate(level,goodPad);
+        bay(level,goodPad);
         plateArrival=vehicle(level,0,72,0,.5);
         plateArrival.cargo[0].deck=
             com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
@@ -162,15 +162,10 @@ public final class TransportChecks implements ModInitializer {
         plateArrival.cargo[0].items.set(215,new net.minecraft.world.item.ItemStack(
             net.minecraft.world.item.Items.EMERALD,12));
         plateArrival.sync();
-        if(!goodPad.equals(PalletPlateBlock.ahead(level,
-                new net.minecraft.world.phys.Vec3(72.5,64.26,-1),Direction.NORTH)))
-            throw new AssertionError("Last 3x3 conveyor cannot find adjacent 2x2 landing pad");
-        // If someone has already placed a pallet on the plate, the carrier
-        // must stop and retain its original contents with no duplicate.
-        BlockPos blockedPad=new BlockPos(77,64,-3);
+        BlockPos blockedPad=new BlockPos(78,64,-3);
         module(level,new BlockPos(78,64,0),"conveyor_straight");
-        plate(level,blockedPad);
-        level.setBlock(blockedPad.above(),Blocks.STONE.defaultBlockState(),2);
+        bay(level,blockedPad);
+        level.setBlock(DroneBayCargo.root(blockedPad),Blocks.STONE.defaultBlockState(),2);
         blockedPlateArrival=vehicle(level,0,78,0,.5);
         blockedPlateArrival.cargo[0].deck=
             com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
@@ -179,6 +174,26 @@ public final class TransportChecks implements ModInitializer {
         blockedPlateArrival.cargo[0].items.set(0,new net.minecraft.world.item.ItemStack(
             net.minecraft.world.item.Items.GOLD_INGOT,19));
         blockedPlateArrival.sync();
+        // Opposite direction: an unloaded conveyor next to an OUTPUT bay
+        // must be able to take the original inventory from the real deck.
+        // x=84 lives in chunk 5, beyond the original smoke fixture's
+        // forced x=0..4. Without tickets the carrier never ticks and
+        // falsely looks like a bay-to-conveyor transfer failure.
+        for(int chunkZ=-1;chunkZ<=0;chunkZ++){
+            level.setChunkForced(5,chunkZ,true);level.getChunk(5,chunkZ);
+        }
+        BlockPos feederBay=new BlockPos(84,64,3);
+        bay(level,feederBay);
+        module(level,new BlockPos(84,64,0),"conveyor_straight");
+        module(level,new BlockPos(84,64,-3),"conveyor_straight");
+        var feeder=new PalletCargo();
+        feeder.deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
+        feeder.items.set(0,new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COPPER_INGOT,29));
+        if(!DroneBayCargo.deposit(level,feederBay,feeder))
+            throw new AssertionError("Could not stage wrapped pallet on OUTPUT bay for conveyor");
+        conveyorBayPickup=vehicle(level,0,84,0,.5);
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -300,16 +315,24 @@ public final class TransportChecks implements ModInitializer {
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
         if(conveyor.tickCount==40){
             var received=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
-                .wrappedController(server.overworld(),new BlockPos(71,65,-3));
+                .wrappedController(server.overworld(),DroneBayCargo.root(new BlockPos(72,64,-3)));
             if(received==null||received.getItem(0).getCount()!=31||
                     received.getItem(215).getCount()!=12||plateArrival.isAlive())
-                throw new AssertionError("Pressure plate did not receive a centered, physical, golem-pickable pallet with its full inventory");
-            if(!server.overworld().getBlockState(new BlockPos(71,64,-3))
-                    .getValue(PalletPlateBlock.POWERED))
-                throw new AssertionError("Physical pallet should keep its pressure plate powered");
+                throw new AssertionError("Parking Bay failed to center a real golem-pickable pallet with 216-slot cargo");
+            if(!server.overworld().getBlockState(new BlockPos(72,64,-3))
+                    .getValue(GuidewayBlock.POWERED))
+                throw new AssertionError("Physical pallet must hold Parking Bay redstone ON");
             if(!blockedPlateArrival.isAlive()||!blockedPlateArrival.hasCargo()||
                     blockedPlateArrival.cargo[0].items.get(0).getCount()!=19)
-                throw new AssertionError("Occupied pressure plate consumed or duplicated its transport cargo");
+                throw new AssertionError("Occupied Parking Bay consumed or duplicated its conveyor cargo");
+            if(conveyorBayPickup.cargo[0].items.get(0).getCount()!=29||
+                    DroneBayCargo.find(server.overworld(),new BlockPos(84,64,3))!=null)
+                throw new AssertionError("Conveyor failed atomic pickup from OUTPUT Parking Bay: "+
+                    "cargo="+conveyorBayPickup.cargo[0].items.get(0).getCount()+
+                    " alive="+conveyorBayPickup.isAlive()+
+                    " running="+conveyorBayPickup.transitStatus()+
+                    " source="+DroneBayCargo.find(server.overworld(),new BlockPos(84,64,3))+
+                    " node="+conveyorBayPickup.blockPosition());
             if(recoveredConveyor.getZ()>-6.9||
                 !recoveredConveyor.cargo[0].items.get(0).is(net.minecraft.world.item.Items.DIAMOND))
                 throw new AssertionError("Recovered conveyor failed to resume moving with intact cargo");
@@ -359,7 +382,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical pressure plate pallet handoff and occupied-pad protection, real drone INPUT pallet staging");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical Parking Bay conveyor IN/OUT handoff and sustained redstone, real drone INPUT pallet staging");
             engine=null;server.halt(false);
         }
     }

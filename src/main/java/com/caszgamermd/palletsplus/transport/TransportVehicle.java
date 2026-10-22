@@ -240,6 +240,17 @@ public final class TransportVehicle extends PathfinderMob {
                 }else status="Unloaded at bay — ready for next shipment";
             }else status="INPUT Parking Bay occupied or obstructed — hovering until pallet can be placed";
         }
+        if(kind()==0&&running&&!hasCargo()){
+            // Conveyor handoff in the opposite direction: acquire one real
+            // wrapped pallet from an adjacent INPUT or OUTPUT bay before
+            // continuing along the rail, without changing inventory owner
+            // until the atomic ground lift succeeds.
+            BlockPos source=DroneBayCargo.nextToConveyor(l,node);
+            if(source!=null&&cargo[0].lift(l,source)){
+                status="Picked up wrapped pallet from Parking Bay";
+                sync();
+            }
+        }
         if(!running){trainSpeed=0;if(kind()==1){var parked=consist();if(parked!=null)for(int i=1;i<parked.size();i++)if(!parked.get(i).follow(l,.25))break;}return;}
         if(kind()==4){fly(l);return;}
         if(kind()==2||kind()==3){status="Needs an engine";return;}
@@ -265,26 +276,13 @@ public final class TransportVehicle extends PathfinderMob {
 
         }
     }
-    /** Place the original carried pallet into the world as a normal
-     * Caszual Additions pallet, perfectly aligned to the plate's 2x2 top.
-     * The PalletCargo transaction transfers its deck item, filter/wrap data
-     * and all 216 inventory slots. Failed placement retains the moving cargo.
-     * Only conveyor carriers may be consumed; passing train cars and drones
-     * must never lose their shipments simply by flying over a plate. */
-    public boolean landOnPlate(ServerLevel level,BlockPos pad){
-        if(kind()!=0||!isAlive()||cargo[0].empty()||
-                !PalletPlateBlock.complete(level,pad))return false;
-        double altitude=getY()-pad.getY();
-        if(altitude<-.1||altitude>2.3)return false;
-        // EAST-oriented pallet starts at the plate's north-west tile and
-        // occupies precisely x..x+1 and z..z+1; root + its 3 satellites.
-        BlockPos palletRoot=pad.above();
-        if(!cargo[0].place(level,palletRoot,Direction.EAST))return false;
-        running=false;traveling=false;status="Placed on pallet pressure plate";
-        sync();
-        level.scheduleTick(pad,TransportContent.PLATE,1);
-        discard();
-        return true;
+    /** An arriving conveyor places the actual pallet on the central 2x2
+     * of the 3x3 Parking Bay. No pressure plate or virtual buffer remains. */
+    public boolean landOnParkingBay(ServerLevel level,BlockPos bay){
+        if(kind()!=0||!isAlive()||cargo[0].empty())return false;
+        if(!DroneBayCargo.deposit(level,bay,cargo[0]))return false;
+        running=false;traveling=false;status="Pallet delivered onto Parking Bay";
+        sync();discard();return true;
     }
     private double advanceGuideway(ServerLevel l,double budget){
         if(!cornerJoin.equals(NO_STATION))return advanceCornerJoin(l,budget);
@@ -341,20 +339,17 @@ public final class TransportVehicle extends PathfinderMob {
             if(!l.hasChunksAt(next.offset(-1,0,-1),next.offset(1,0,1))){
                 traveling=false;status="Waiting for loaded route";return distance;
             }
+            if(kind()==0&&l.getBlockState(next).is(TransportContent.BAY)
+                    &&GuidewayBlock.complete(l,next)){
+                if(landOnParkingBay(l,next))return distance;
+                running=false;traveling=false;
+                status="Parking Bay occupied or cargo missing — waiting for safe handoff";
+                return distance;
+            }
             if(!GuidewayBlock.complete(l,next)){
-                if(kind()==0){
-                    // The last conveyor delivers to a 2x2 pressure plate,
-                    // rather than holding its pallet forever in transit.
-                    // This also works when the smaller plate is not aligned
-                    // exactly with the 3x3 module centerline.
-                    BlockPos pad=PalletPlateBlock.ahead(l,position(),out);
-                    if(pad!=null){
-                        if(landOnPlate(l,pad))return distance;
-                        running=false;traveling=false;
-                        status="Pressure plate occupied — awaiting clear pallet footprint";
-                        return distance;
-                    }
-                }
+                // Retired pallet pressure plates no longer receive cargo.
+                // Existing saves keep their plate blocks, but all new
+                // routes use the 3x3 Parking Bay in either INPUT/OUTPUT mode.
                 // Two 90-degree corner modules can meet at a diagonal tip,
                 // without occupying a shared straight module. A short
                 // guided seam follows the edge to the next corner's inlet.
