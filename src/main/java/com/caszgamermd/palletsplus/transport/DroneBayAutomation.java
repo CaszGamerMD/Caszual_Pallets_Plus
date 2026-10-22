@@ -141,7 +141,10 @@ public final class DroneBayAutomation {
                         new AABB(pos).inflate(4,5,4),v->v.kind()==4&&v.atOutputBay(pos));
                     for(var drone:drones)drone.tickAutomatedBay(level,pos,bay.linked());
                 }
-                if(cargo==null&&warehouseReady(level,bay)){
+                if(cargo==null&&vehicle!=null&&warehouseReady(level,bay)){
+                    // No physically adjacent loaded/available transport:
+                    // do not even latch a warehouse request, much less
+                    // summon two Golems to an idle OUTPUT node.
                     if(!record.has("requested")||!record.get("requested").getAsBoolean()){
                         record.addProperty("requested",true);
                         record.addProperty("request","OUTPUT_AISLE_PALLET");
@@ -150,7 +153,8 @@ public final class DroneBayAutomation {
                         // empty-bay condition. The attached warehouse network
                         // may be serviced by connected automation or Golems.
                     }
-                }else if(cargo!=null&&record.has("requested")&&record.get("requested").getAsBoolean()){
+                }else if((cargo!=null||vehicle==null)&&record.has("requested")
+                        &&record.get("requested").getAsBoolean()){
                     record.addProperty("requested",false);data.setDirty();
                 }
             }else{
