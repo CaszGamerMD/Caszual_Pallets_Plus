@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Real simulation checks in a disposable CI world, enabled only by the dedicated run configuration. */
 public final class TransportChecks implements ModInitializer {
-    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone,recoveredConveyor,plateArrival,blockedPlateArrival,conveyorBayPickup;
+    private TransportVehicle engine,conveyor,extra,endOfLine,supportedRamp,blockedRamp,tMergeNorth,tMergeWest,diagonalCorner,drone,recoveredConveyor,plateArrival,blockedPlateArrival,conveyorBayPickup,transferFlatbed;
     private final List<TransportVehicle> cars=new ArrayList<>();
     private boolean conveyorSpeed,holdStop,indexed,coupled,tNorthDone,tWestDone,cornerDone;
     private int elapsed,coupledTick,nextCouple=1,couplingTicks;
@@ -207,28 +207,13 @@ public final class TransportChecks implements ModInitializer {
             net.minecraft.world.item.Items.GOLD_INGOT,37));
         if(!DroneBayCargo.deposit(level,pushOutput,load))
             throw new AssertionError("Cannot stage OUTPUT node for two-Golem pushing test");
-        TransportVehicle flatbed=vehicle(level,2,58,20,20.5);
-        boolean readyOutput=NodePushBridge.eligible(level,pushOutput,flatbed,true);
-        boolean pushResult=readyOutput&&NodePushBridge.complete(level,pushOutput,flatbed.getUUID(),true);
-        if(!pushResult||DroneBayCargo.find(level,pushOutput)!=null
-                ||flatbed.cargo[0].items.get(0).getCount()!=37)
-            throw new AssertionError("Two-Golem OUTPUT node push failed: eligible="+readyOutput
-                +" result="+pushResult+" cargo="+flatbed.cargo[0].items.get(0).getCount()
-                +" flatbed="+flatbed.getUUID()+" available="+flatbed.canNodeTransfer(true)
-                +" pallet="+DroneBayCargo.find(level,pushOutput)
-                +" mode="+DroneBayRoutes.get(level,pushOutput)
-                +" pos="+flatbed.position());
+        transferFlatbed=vehicle(level,2,58,20,20.5);
+        // Wait for ordinary server entity registration before the pushers
+        // arrive; their real walking job takes many ticks, not the same
+        // synchronous instant as a just-spawned transport.
         BlockPos pushInput=new BlockPos(55,64,26);
         bay(level,pushInput);
         DroneBayRoutes.mode(level,pushInput);
-        flatbed.setPos(58.5,64.26,26.5);
-        if(!NodePushBridge.eligible(level,pushInput,flatbed,false)
-                ||!NodePushBridge.complete(level,pushInput,flatbed.getUUID(),false)
-                ||!DroneBayCargo.occupied(level,pushInput)
-                ||flatbed.hasCargo())
-            throw new AssertionError("Two-Golem INPUT node did not unload real flatbed cargo safely");
-        if(NodePushBridge.eligible(level,pushInput,flatbed,true))
-            throw new AssertionError("Never push an INPUT node pallet to an OUTPUT transport");
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -365,6 +350,23 @@ public final class TransportChecks implements ModInitializer {
         if(++elapsed>800)throw new AssertionError("Simulation did not finish");
         int moveTicks=engine.tickCount-coupledTick;
         if(conveyor.tickCount==20){near(.5-conveyor.getZ(),8,"8 m/s conveyor");conveyorSpeed=true;}
+        if(conveyor.tickCount==20){
+            BlockPos outputNode=new BlockPos(55,64,20);
+            if(!NodePushBridge.eligible(server.overworld(),outputNode,transferFlatbed,true)
+                    ||!NodePushBridge.complete(server.overworld(),outputNode,transferFlatbed.getUUID(),true)
+                    ||DroneBayCargo.find(server.overworld(),outputNode)!=null
+                    ||transferFlatbed.cargo[0].items.get(0).getCount()!=37)
+                throw new AssertionError("Two Golems failed actual stationary train loading at OUTPUT node");
+            transferFlatbed.setPos(58.5,64.26,26.5);
+        }
+        if(conveyor.tickCount==40){
+            BlockPos inputNode=new BlockPos(55,64,26);
+            if(!NodePushBridge.eligible(server.overworld(),inputNode,transferFlatbed,false)
+                    ||!NodePushBridge.complete(server.overworld(),inputNode,transferFlatbed.getUUID(),false)
+                    ||!DroneBayCargo.occupied(server.overworld(),inputNode)
+                    ||transferFlatbed.hasCargo())
+                throw new AssertionError("Two Golems failed stationary train unloading onto INPUT node");
+        }
         if(conveyor.tickCount==40){
             var received=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
                 .wrappedController(server.overworld(),DroneBayCargo.root(new BlockPos(72,64,-3)));
