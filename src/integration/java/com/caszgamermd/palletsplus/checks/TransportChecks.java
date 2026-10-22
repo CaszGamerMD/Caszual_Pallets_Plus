@@ -194,6 +194,36 @@ public final class TransportChecks implements ModInitializer {
         if(!DroneBayCargo.deposit(level,feederBay,feeder))
             throw new AssertionError("Could not stage wrapped pallet on OUTPUT bay for conveyor");
         conveyorBayPickup=vehicle(level,0,84,0,.5);
+        // Two-Golem transfer bridge can only load an ADJACENT stationary
+        // flatbed/conveyor and never consumes a pallet when none is present.
+        for(int cz=0;cz<=2;cz++){level.setChunkForced(3,cz,true);level.getChunk(3,cz);}
+        BlockPos pushOutput=new BlockPos(55,64,20);
+        bay(level,pushOutput);
+        var load=new PalletCargo();
+        load.deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
+        load.items.set(0,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.GOLD_INGOT,37));
+        if(!DroneBayCargo.deposit(level,pushOutput,load))
+            throw new AssertionError("Cannot stage OUTPUT node for two-Golem pushing test");
+        TransportVehicle flatbed=vehicle(level,2,58,20,20.5);
+        if(!NodePushBridge.eligible(level,pushOutput,flatbed,true)
+                ||!NodePushBridge.complete(level,pushOutput,flatbed.getUUID(),true)
+                ||DroneBayCargo.find(level,pushOutput)!=null
+                ||flatbed.cargo[0].items.get(0).getCount()!=37)
+            throw new AssertionError("Two-Golem OUTPUT node did not atomically push to adjacent flatbed");
+        BlockPos pushInput=new BlockPos(55,64,26);
+        bay(level,pushInput);
+        DroneBayRoutes.mode(level,pushInput);
+        flatbed.setPos(58.5,64.26,26.5);
+        if(!NodePushBridge.eligible(level,pushInput,flatbed,false)
+                ||!NodePushBridge.complete(level,pushInput,flatbed.getUUID(),false)
+                ||!DroneBayCargo.occupied(level,pushInput)
+                ||flatbed.hasCargo())
+            throw new AssertionError("Two-Golem INPUT node did not unload real flatbed cargo safely");
+        if(NodePushBridge.eligible(level,pushInput,flatbed,true))
+            throw new AssertionError("Never push an INPUT node pallet to an OUTPUT transport");
         engine=vehicle(level,1,8,0,.5);cars.add(engine);
         double z=.5;
         for(int i=0;i<10;i++){
@@ -228,6 +258,23 @@ public final class TransportChecks implements ModInitializer {
             throw new AssertionError("Warehouse Rack Computer will consume Parking Bay Link");
         if(!DroneBayRoutes.get(level,receive).input())
             throw new AssertionError("Link tool setup unexpectedly changed INPUT bay mode");
+        // Existing saved block ID now appears in creative as the new
+        // Pallet Transfer Node. Role switch immediately changes its 3x3
+        // center model from O to I and back without replacing the block.
+        var transferItem=net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(
+            net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                "caszual_pallets_plus","pallet_transfer_node"));
+        if(!(transferItem instanceof net.minecraft.world.item.BlockItem transferBlock)
+                ||transferBlock.getBlock()!=TransportContent.BAY)
+            throw new AssertionError("Renamed Pallet Transfer Node doesn't place legacy saved blocks.");
+        if(level.getBlockState(receive).getValue(GuidewayBlock.OUTLET)!=1)
+            throw new AssertionError("INPUT node model not displaying I.");
+        String back=DroneBayRoutes.mode(level,receive);
+        if(!back.contains("OUTPUT")||level.getBlockState(receive).getValue(GuidewayBlock.OUTLET)!=0)
+            throw new AssertionError("Empty-hand output selection failed: "+back);
+        String inputAgain=DroneBayRoutes.mode(level,receive);
+        if(!inputAgain.contains("INPUT")||level.getBlockState(receive).getValue(GuidewayBlock.OUTLET)!=1)
+            throw new AssertionError("Empty-hand input selection failed: "+inputAgain);
         String linked=DroneBayRoutes.link(level,send,receive);
         if(!linked.startsWith("Air route linked"))throw new AssertionError(linked);
         // Reproduce the real player workflow: after choosing a distant
@@ -382,7 +429,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical Parking Bay conveyor IN/OUT handoff and sustained redstone, real drone INPUT pallet staging");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical Parking Bay conveyor IN/OUT handoff and sustained redstone, real drone INPUT pallet staging, Pallet Transfer Node I/O role switching and two-Golem adjacent train handoffs");
             engine=null;server.halt(false);
         }
     }
