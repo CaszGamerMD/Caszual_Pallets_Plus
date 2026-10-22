@@ -38,7 +38,10 @@ public final class TransportContent {
                 new Item.Properties().setId(tKey).useBlockDescriptionPrefix())));
         LOGIC_ENTITY=Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,PalletsPlus.legacyId("logic_conveyor"),net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(LogicConveyorEntity::new,WAYS.get("conveyor_logic")).build());
         STATION=block("train_station_post",StationPostBlock::new);
+        // Registry kept for older saved worlds, but no recipe, creative item
+        // or automated transport uses the retired pressure plate.
         PLATE=block("pallet_pressure_plate",PalletPlateBlock::new);
+        ITEMS.remove("pallet_pressure_plate");
         COMPUTER=block("pallet_transit_computer",TransitComputerBlock::new);
         DroneChunkLoading.initialize();DroneBayAutomation.initialize();TransitNet.initialize();
         var bayKey=ResourceKey.create(Registries.BLOCK,PalletsPlus.legacyId("drone_parking_bay"));
