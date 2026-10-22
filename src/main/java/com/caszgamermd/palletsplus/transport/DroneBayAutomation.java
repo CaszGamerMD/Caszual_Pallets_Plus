@@ -71,7 +71,7 @@ public final class DroneBayAutomation {
             var dispatch=bridge.getMethod("request",ServerLevel.class,UUID.class,BlockPos.class,BlockPos.class);
             return (String)dispatch.invoke(null,level,owner,bay.warehouse(),cargo);
         }catch(ClassNotFoundException|NoSuchMethodException ex){
-            return "WAITING: install Caszual Additions with three-Golem INPUT bay pickup; pallet held safely.";
+            return "WAITING: install Caszual Additions 0.1.3 with four-Golem INPUT bay pickup; pallet held safely.";
         }catch(IllegalArgumentException ex){
             return "INVALID: warehouse bay link has no valid owner.";
         }catch(ReflectiveOperationException ex){
@@ -114,16 +114,16 @@ public final class DroneBayAutomation {
                 if(cargo!=null&&warehouseReady(level,bay)){
                     if(!record.has("requested")||!record.get("requested").getAsBoolean()){
                         record.addProperty("requested",true);record.addProperty("pulse",true);
-                        record.addProperty("request","THREE_GOLEM_PICKUP_NO_REPLACEMENT_TO_INPUT_RACK");
+                        record.addProperty("request","FOUR_GOLEM_PICKUP_NO_REPLACEMENT_TO_INPUT_RACK");
                         data.setDirty();
                     }
-                    // Existing Additions REMOTE dispatch is a real four-golem
-                    // crew with full pallet escrow and rack/PTP destination.
+                    // Special INPUT bay pickup calls the dedicated FOUR-Golem
+                    // no-replacement dispatcher, not normal REMOTE exchange.
                     // Retry only while target physically exists; its dispatcher
                     // itself refuses duplicate target missions.
                     if(level.getGameTime()%40==0&&!bay.owner().isEmpty()){
-                        // An INPUT bay uses three independently walking
-                        // Golems. The existing four-Golem REMOTE EXCHANGE
+                        // An INPUT bay uses four independently walking
+                        // empty-handed Golems. The normal REMOTE EXCHANGE
                         // would place an unwanted replacement deck here.
                         String result=dispatchNoReplacement(level,bay,cargo);
                         String before=record.has("dispatch")?record.get("dispatch").getAsString():"";
