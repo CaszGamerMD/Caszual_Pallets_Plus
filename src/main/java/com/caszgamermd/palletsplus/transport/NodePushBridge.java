@@ -29,9 +29,11 @@ public final class NodePushBridge {
             // connected warehouse's loaded OUTPUT aisle rack. This avoids
             // the previous deadlock where no two-Golem crew was dispatched
             // until the player manually placed a pallet on the node.
-            return !DroneBayCargo.occupied(level,node)&&bay.warehouse()!=null
-                &&!com.caszgamermd.caszualadditions.racks.WarehouseAislePriority
-                    .stagedOutputRacks(level,bay.warehouse()).isEmpty();
+            // The Additions dispatcher checks the OUTPUT-aisle stock
+            // BEFORE reserving or spawning workers. Keeping that lookup
+            // there preserves compilation against older declared Additions
+            // APIs; Pallets Plus only asserts that transport is adjacent.
+            return !DroneBayCargo.occupied(level,node)&&bay.warehouse()!=null;
         }
         return !DroneBayCargo.occupied(level,node);
     }
