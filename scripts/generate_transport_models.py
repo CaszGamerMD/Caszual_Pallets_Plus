@@ -108,8 +108,7 @@ for name in names:
    if row in (0,2):
     z=1 if row==0 else 13;add([1,3.05,z],[15,3.3,z+2],'yellow')
    if part==4:
-    for x in (3,11):add([x,3.05,3],[x+2,3.4,13],'edge')
-    add([5,3.05,7],[11,3.4,9],'edge')
+    add([3,3.04,3],[13,3.14,13],'dark')
    if part in (0,2,6,8):add([6,3.1,6],[10,3.8,10],'light')
   elif name.startswith('pallet_rail'):
    for z in (1,9):add([0,0,z],[16,1.2,z+3],'wood')
@@ -153,6 +152,15 @@ for name in names:
    add([5,4.1,5],[11,4.4,11],'steel')
    for a,b in [([7,4.4,4],[9,4.7,12]),([4,4.4,7],[12,4.7,9]),([3,4.4,6],[5,4.7,10]),([11,4.4,6],[13,4.7,10]),([6,4.4,3],[10,4.7,5])]:add(a,b,'yellow')
   model(f'{name}_{part}',els)
+  if name=='drone_parking_bay':
+   for role in (0,1):
+    chosen=list(els)
+    if part==4:
+     if role==0:
+      chosen += [cube([4,3.18,4],[12,3.5,5.5],'yellow'),cube([4,3.18,11],[12,3.5,12.5],'yellow'),cube([4,3.18,5.5],[5.5,3.5,11],'yellow'),cube([10.5,3.18,5.5],[12,3.5,11],'yellow')]
+     else:
+      chosen += [cube([4,3.18,4],[12,3.5,5.5],'light'),cube([7.25,3.18,5.5],[8.75,3.5,11],'light'),cube([4,3.18,11],[12,3.5,12.5],'light')]
+    model(f'{name}_{part}_role{role}',chosen)
   if name=='conveyor_t_junction':
    for outlet in range(3):
     chosen=list(els)
@@ -180,6 +188,8 @@ for name in names:
     for power in (False,True):variants[f'facing={facing},part={part},powered={str(power).lower()}']={'model':f'caszual_additions:block/transport/{name}_{part}'+('_raised' if power else ''),'y':rot}
    elif name=='conveyor_t_junction':
     for outlet in range(3):variants[f'facing={facing},part={part},outlet={outlet}']={'model':f'caszual_additions:block/transport/{name}_{part}_out{outlet}','y':rot}
+   elif name=='drone_parking_bay':
+    for role in (0,1):variants[f'facing={facing},part={part},outlet={role}']={'model':f'caszual_additions:block/transport/{name}_{part}_role{role}','y':rot}
    else:variants[f'facing={facing},part={part}']={'model':f'caszual_additions:block/transport/{name}_{part}','y':rot}
  write(f'assets/caszual_additions/blockstates/{name}.json',{'variants':variants})
  # A reduced whole-module inventory model keeps every element inside vanilla bounds.
@@ -309,7 +319,7 @@ for part in range(4):
 write('assets/caszual_additions/blockstates/pallet_pressure_plate.json',{'variants':platevariants})
 item('pallet_pressure_plate','pallet_pressure_plate_0_false')
 langp=AS/'lang/en_us.json';langp.parent.mkdir(parents=True,exist_ok=True);lang={}
-labels={'pallet_rail_index':'Warehouse Rail — Car Indexer','conveyor_crank':'Conveyor Direction Crank','conveyor_hold':'Pallet Conveyor — Redstone Hold Bar','conveyor_logic':'Pallet Conveyor — Logic Switch','train_station_post':'Train Station Post','pallet_pressure_plate':'Pallet Pressure Plate','pallet_transit_computer':'Pallet Transit Computer','conveyor_straight':'Pallet Conveyor — Straight','conveyor_left':'Pallet Conveyor — Left Turn','conveyor_right':'Pallet Conveyor — Right Turn','conveyor_t_junction':'Pallet Conveyor — T-Junction (2 IN / 1 OUT)','conveyor_up':'Pallet Conveyor — Ramp Up','conveyor_down':'Pallet Conveyor — Ramp Down','pallet_rail':'Warehouse Rail — Straight','pallet_rail_left':'Warehouse Rail — Left Turn','pallet_rail_right':'Warehouse Rail — Right Turn','drone_parking_bay':'Drone Parking Bay','pallet_engine':'Pallet Train Engine','pallet_car':'Three-Pallet Flatbed Car','passenger_car':'Passenger Car','pallet_drone':'Pallet Drone','transport_controller':'Pallet Transport Controller','parking_bay_link':'Parking Bay Link'}
+labels={'pallet_rail_index':'Warehouse Rail — Car Indexer','conveyor_crank':'Conveyor Direction Crank','conveyor_hold':'Pallet Conveyor — Redstone Hold Bar','conveyor_logic':'Pallet Conveyor — Logic Switch','train_station_post':'Train Station Post','pallet_pressure_plate':'Pallet Pressure Plate','pallet_transit_computer':'Pallet Transit Computer','conveyor_straight':'Pallet Conveyor — Straight','conveyor_left':'Pallet Conveyor — Left Turn','conveyor_right':'Pallet Conveyor — Right Turn','conveyor_t_junction':'Pallet Conveyor — T-Junction (2 IN / 1 OUT)','conveyor_up':'Pallet Conveyor — Ramp Up','conveyor_down':'Pallet Conveyor — Ramp Down','pallet_rail':'Warehouse Rail — Straight','pallet_rail_left':'Warehouse Rail — Left Turn','pallet_rail_right':'Warehouse Rail — Right Turn','drone_parking_bay':'Pallet Transfer Node','pallet_engine':'Pallet Train Engine','pallet_car':'Three-Pallet Flatbed Car','passenger_car':'Passenger Car','pallet_drone':'Pallet Drone','transport_controller':'Pallet Transport Controller','parking_bay_link':'Pallet Transfer Link'}
 for name,label in labels.items():lang[('block.' if name in names+['train_station_post','pallet_pressure_plate','pallet_transit_computer'] else 'item.')+'caszual_additions.'+name]=label
 lang['entity.caszual_additions.pallet_transport']='Pallet Transport';langp.write_text(json.dumps(lang,indent=2,ensure_ascii=False)+'\n')
 tag=ROOT/'data/caszual_additions/tags/item/caszual_content.json';tag.parent.mkdir(parents=True,exist_ok=True);obj={'replace':False,'values':[]}
@@ -321,12 +331,18 @@ for name in labels:
 # uses the same detailed model and is the result of new crafting.
 write('assets/caszual_pallets_plus/items/conveyor_t_junction.json',
       {'model':{'type':'minecraft:model','model':'caszual_additions:block/transport/conveyor_t_junction_item'}})
+write('assets/caszual_pallets_plus/items/pallet_transfer_node.json',
+      {'model':{'type':'minecraft:model','model':'caszual_additions:block/transport/drone_parking_bay_item'}})
+lang['item.caszual_pallets_plus.pallet_transfer_node']='Pallet Transfer Node'
+langp.write_text(json.dumps(lang,indent=2,ensure_ascii=False)+'\n')
+obj['values']=[value for value in obj['values'] if value!='caszual_additions:drone_parking_bay']
+obj['values'].append('caszual_pallets_plus:pallet_transfer_node')
 tag.write_text(json.dumps(obj,indent=2)+'\n')
 # Survival recipes; module kits each place a complete 3x3 footprint.
 for name in labels:
  if name=='pallet_pressure_plate':continue
  ingredients={'pallet_rail_index':'minecraft:observer','conveyor_crank':'minecraft:lever','conveyor_hold':'minecraft:iron_bars','conveyor_logic':'minecraft:repeater','train_station_post':'minecraft:redstone_torch','pallet_pressure_plate':'minecraft:heavy_weighted_pressure_plate','pallet_transit_computer':'minecraft:map','conveyor_straight':'minecraft:hopper','conveyor_left':'minecraft:amethyst_shard','conveyor_right':'minecraft:quartz','conveyor_t_junction':'minecraft:dropper','conveyor_up':'minecraft:piston','conveyor_down':'minecraft:sticky_piston','pallet_rail':'minecraft:rail','pallet_rail_left':'minecraft:powered_rail','pallet_rail_right':'minecraft:detector_rail','pallet_engine':'minecraft:furnace','pallet_car':'minecraft:chest','passenger_car':'minecraft:oak_stairs','pallet_drone':'minecraft:ender_pearl','drone_parking_bay':'minecraft:lodestone','transport_controller':'minecraft:comparator','parking_bay_link':'minecraft:ender_eye'}
- write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':('caszual_pallets_plus:' if name=='conveyor_t_junction' else 'caszual_additions:')+name,'count':1}})
+ write(f'data/caszual_additions/recipe/{name}.json',{'type':'minecraft:crafting_shaped','pattern':['III','ISI','IRI'],'key':{'I':'minecraft:iron_ingot','S':ingredients[name],'R':'minecraft:redstone'},'result':{'id':'caszual_pallets_plus:pallet_transfer_node' if name=='drone_parking_bay' else (('caszual_pallets_plus:' if name=='conveyor_t_junction' else 'caszual_additions:')+name),'count':1}})
 print('Generated 13 modular guideways and transit control furniture, 4 vehicle models, controller, recipes and discovery tags.')
 
 for name in ('train_station_post','pallet_transit_computer'):
