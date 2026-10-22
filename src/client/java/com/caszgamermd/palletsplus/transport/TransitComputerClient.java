@@ -43,7 +43,7 @@ public final class TransitComputerClient {
             JsonArray colors=data.getAsJsonArray("colors");
             for(int z=0;z<64;z++)for(int x=0;x<64;x++){int c=colors.get(z*64+x).getAsInt();g.fill(mapX+x*size/64,mapY+z*size/64,mapX+(x+1)*size/64,mapY+(z+1)*size/64,c==-1?(((x/4+z/4)%2==0)?0xff192a35:0xff1d303c):0xff000000|c);}
             for(var e:data.getAsJsonArray("stations")){var s=e.getAsJsonObject();int x=mx(s.get("x").getAsDouble()),y=mz(s.get("z").getAsDouble());int color=s.get("kind").getAsString().equals("bay")?0xff67c9ff:0xffee776b;g.fill(x-3,y-3,x+3,y+3,color);g.fill(x-1,y-1,x+1,y+1,0xff101922);}
-            String detail="Hover a pallet or bay for carrier and route status.";String detail2="";
+            String detail="Hover a pallet or node for carrier and route status.";String detail2="";
             JsonArray bayLinks=data.has("bayLinks")?data.getAsJsonArray("bayLinks"):new JsonArray();
             int listed=0;
             for(var entry:bayLinks){
@@ -55,7 +55,7 @@ public final class TransitComputerClient {
                     g.fill(bx-4,by-4,bx+5,by+5,0xff101922);
                     g.fill(bx-3,by-3,bx+4,by+4,color);
                     if(Math.abs(mouseX-bx)<=6&&Math.abs(mouseY-by)<=6){
-                        detail=(input?"INPUT":"OUTPUT")+" Drone Parking Bay @ "+bay.get("x").getAsInt()+","+
+                        detail=(input?"INPUT":"OUTPUT")+" Pallet Transfer Node @ "+bay.get("x").getAsInt()+","+
                             bay.get("y").getAsInt()+","+bay.get("z").getAsInt();
                         detail2=(bay.has("to")?"Linked to "+bay.get("to").getAsString()+"  ":"")+
                             (bay.has("warehouse")?"Warehouse "+bay.get("warehouse").getAsString():"Not connected to warehouse");
@@ -75,7 +75,7 @@ public final class TransitComputerClient {
                     if(Math.abs(mouseX-x)<=4&&Math.abs(mouseY-y)<=4){var p=pallets.get(i).getAsJsonObject();String type=switch(v.get("kind").getAsInt()){case 2->"Train";case 4->"Drone";default->"Conveyor";};detail=type+" / pallet "+p.get("slot").getAsInt()+" / "+p.get("stacks").getAsInt()+" stacks / "+v.get("status").getAsString();detail2="XYZ "+v.get("x").getAsInt()+", "+v.get("y").getAsInt()+", "+v.get("z").getAsInt()+(live?" • Live":" • Last known (unloaded)");}
                 }
             }
-            text(g,"Gold: pallet   Green: IN bay   Orange: OUT bay   Red: station",12,mapY+size+7,0xffb8c9ca);
+            text(g,"Gold: pallet   Green: IN node   Orange: OUT node   Red: station",12,mapY+size+7,0xffb8c9ca);
             text(g,"N ↑   Center "+data.get("cx")+", "+data.get("cz")+"   "+data.get("scale")+" blocks/pixel   Page "+(data.get("page").getAsInt()+1)+"/"+data.get("pages"),12,mapY+size+19,0xff8da7aa);
             text(g,detail,12,height-25,0xffffce66);text(g,detail2.isEmpty()?"Dark squares: uncharted terrain. Map refreshes each second.":detail2,12,height-13,0xffb8c9ca);
         }
