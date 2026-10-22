@@ -109,4 +109,8 @@ While a physical pallet occupies a bay, the 3×3 bay continuously emits redstone
 
 Conveyors can move loaded pallets onto adjacent INPUT or OUTPUT Parking Bays, and empty conveyor carriers can pick up wrapped pallets from an adjacent bay. The warehouse scanner's DIRECT or FORKLIFT mode resolves clicks on a bay into the actual underlying pallet, so Golems and forklifts can lift or place real pallets onto bays. A filled destination is never overwritten.
 
-An INPUT bay attached to a warehouse requests the new **three-Golem, no-replacement** pickup from Caszual Additions **0.1.2**. The crew returns a pallet to an empty INPUT aisle rack (or regular rack fallback), without consuming or leaving any empty pallet on the bay. It can run while the warehouse-linking player is offline. Install matching updated Additions 0.1.2; older Additions will leave the pallet safely on the bay rather than perform an unwanted replacement exchange.
+An INPUT bay attached to a warehouse requests the new **four-Golem, no-replacement** pickup from Caszual Additions **0.1.3**. The crew returns a pallet to an empty INPUT aisle rack (or regular rack fallback), without consuming or leaving any empty pallet on the bay. It can run while the warehouse-linking player is offline. Install matching updated Additions 0.1.3; older Additions will leave the pallet safely on the bay rather than perform an unwanted replacement exchange.
+
+## Parking Bay pickup vs. Scanner Remote (0.4.9)
+
+**Parking Bay INPUT retrieval:** Four warehouse Golems come together, all empty-handed; they take the pallet to an INPUT aisle rack. No replacement pallet is used. **Normal Scanner REMOTE pickup:** Four warehouse Golems are still dispatched; three travel to the target and the fourth carries a new empty pallet to exchange. These are distinct orders. Requires matching Caszual Additions **0.1.3** for automatic INPUT bay pickup. Existing bay pallets remain safe if Additions has not been updated.
