@@ -78,6 +78,28 @@ public final class DroneBayAutomation {
             return "WAITING: Additions input-crew dispatcher unavailable: "+ex.getClass().getSimpleName();
         }
     }
+    /** The two-pusher task lives in Caszual Additions, not inside the
+     * drone flight controller. Demand is raised only when a suitable
+     * adjacent conveyor carrier or stopped train flatbed really exists.
+     * A warehouse with no adjacent transport gets NO dispatch request. */
+    private static String requestPush(ServerLevel level,DroneBayRoutes.Bay bay,
+            TransportVehicle vehicle,boolean loading){
+        try{
+            UUID owner=UUID.fromString(bay.owner());
+            Class<?> bridge=Class.forName(
+                "com.caszgamermd.caszualadditions.racks.PalletNodePushCrew");
+            var method=bridge.getMethod("request",ServerLevel.class,UUID.class,
+                BlockPos.class,BlockPos.class,UUID.class,boolean.class);
+            return (String)method.invoke(null,level,owner,bay.warehouse(),
+                bay.pos(),vehicle.getUUID(),loading);
+        }catch(ClassNotFoundException|NoSuchMethodException ex){
+            return "WAITING: install Caszual Additions with 2-Golem node pushing.";
+        }catch(IllegalArgumentException ex){
+            return "INVALID: warehouse node owner UUID.";
+        }catch(ReflectiveOperationException ex){
+            return "WAITING: Two-Golem dispatcher unavailable: "+ex.getClass().getSimpleName();
+        }
+    }
     private static void tick(ServerLevel level){
         var data=TransitWorldData.get(level);
         for(JsonObject record:new ArrayList<>(data.stations.values())){
@@ -85,13 +107,33 @@ public final class DroneBayAutomation {
             BlockPos pos=bayPos(record);if(pos==null||!level.hasChunkAt(pos))continue;
             var bay=DroneBayRoutes.get(level,pos);
             if(bay==null||!DroneBayRoutes.valid(level,pos))continue;
+            if(level.getBlockState(pos).getValue(GuidewayBlock.OUTLET)
+                    !=(bay.input()?1:0))
+                DroneBayRoutes.refreshMarker(level,pos,bay.input());
             // Physical redstone presence sensor: stay powered as LONG as
             // a wrapped pallet stands on the Parking Bay, not just for a
             // single request tick. Golems and forklifts clearing it switch
             // the level back off at the next sensor poll.
             BlockPos onBay=DroneBayCargo.find(level,pos);
-            signal(level,pos,onBay!=null);
+            signal(level,pos,DroneBayCargo.occupied(level,pos));
             BlockPos cargo=bay.input()?onBay:staged(level,pos);
+            // No nearby eligible physical transport means NO two-Golem
+            // push request, even if the node has power/warehouse access.
+            boolean pushingFromNode=bay.output();
+            TransportVehicle vehicle=warehouseReady(level,bay)
+                ?NodePushBridge.adjacentVehicle(level,pos,pushingFromNode):null;
+            if(vehicle!=null && ((pushingFromNode&&onBay!=null)
+                    ||(!pushingFromNode&&!DroneBayCargo.occupied(level,pos)))
+                    &&level.getGameTime()%40==0){
+                String outcome=requestPush(level,bay,vehicle,pushingFromNode);
+                String old=record.has("push_dispatch")?record.get("push_dispatch").getAsString():"";
+                if(!outcome.equals(old)){
+                    record.addProperty("push_dispatch",outcome);
+                    data.setDirty();
+                }
+            }else if(vehicle==null&&record.has("push_dispatch")){
+                record.remove("push_dispatch");data.setDirty();
+            }
             if(bay.output()){
                 if(bay.linked()!=null&&DroneBayRoutes.receiverReady(level,bay.linked())){
                     var drones=level.getEntitiesOfClass(TransportVehicle.class,
