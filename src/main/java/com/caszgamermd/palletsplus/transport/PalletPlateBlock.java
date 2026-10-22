@@ -79,7 +79,9 @@ public final class PalletPlateBlock extends Block {
             for(TransportVehicle vehicle:l.getEntitiesOfClass(TransportVehicle.class,arrival)){
                 if(vehicle.kind()!=0||!vehicle.hasCargo())continue;
                 double dx=vehicle.getX()-(p.getX()+1),dz=vehicle.getZ()-(p.getZ()+1);
-                if(dx*dx+dz*dz<=1.44)vehicle.landOnPlate(l,p);
+                // Legacy pressure plates remain in world saves but no longer
+                // accept arriving pallets. Use a Drone Parking Bay instead.
+                if(dx*dx+dz*dz<=1.44)break;
             }
         }
         if(loaded){
