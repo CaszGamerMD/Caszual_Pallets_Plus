@@ -122,7 +122,8 @@ public final class DroneBayAutomation {
             boolean pushingFromNode=bay.output();
             TransportVehicle vehicle=warehouseReady(level,bay)
                 ?NodePushBridge.adjacentVehicle(level,pos,pushingFromNode):null;
-            if(vehicle!=null && ((pushingFromNode&&onBay!=null)
+            if(vehicle!=null && ((pushingFromNode
+                    &&(onBay!=null||!DroneBayCargo.occupied(level,pos)))
                     ||(!pushingFromNode&&!DroneBayCargo.occupied(level,pos)))
                     &&level.getGameTime()%40==0){
                 String outcome=requestPush(level,bay,vehicle,pushingFromNode);
