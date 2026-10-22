@@ -238,7 +238,7 @@ public final class TransportVehicle extends PathfinderMob {
                     returning=true;running=true;traveling=true;flightStage=0;
                     status="Pallet delivered — returning to OUTPUT bay";
                 }else status="Unloaded at bay — ready for next shipment";
-            }else status="Waiting for clear pallet space beside INPUT bay";
+            }else status="INPUT Parking Bay occupied or obstructed — hovering until pallet can be placed";
         }
         if(!running){trainSpeed=0;if(kind()==1){var parked=consist();if(parked!=null)for(int i=1;i<parked.size();i++)if(!parked.get(i).follow(l,.25))break;}return;}
         if(kind()==4){fly(l);return;}
@@ -644,9 +644,21 @@ public final class TransportVehicle extends PathfinderMob {
             ", occupied "+occupied+", unsuitable ground "+rejected+
             "). Clear supported 2x2 ground with three blocks of headroom and retry.";
     }
-    /** Dock transfer uses real pallet blocks beside the bay, never loose item drops. */
+    /** Every inbound drone puts its load ON the central 2x2 of its
+     * INPUT Parking Bay, as a real Additions ground pallet. The existing
+     * output bay also accepts ground pallets on its deck as pickup stock;
+     * older bays with beside-the-pad staging keep working. */
     private boolean serviceBay(ServerLevel l,boolean pickup){
         if(!GuidewayBlock.complete(l,node)||!l.getBlockState(node).is(TransportContent.BAY))return false;
+        if(pickup){
+            var center=DroneBayCargo.find(l,node);
+            if(center!=null&&cargo[0].empty()&&cargo[0].lift(l,center)){sync();return true;}
+        }else{
+            if(DroneBayCargo.deposit(l,node,cargo[0])){sync();return true;}
+            // Do NOT bypass occupied INPUT decks by leaving cargo beside
+            // the warehouse. A physical bay pallet must be taken first.
+            return false;
+        }
         Direction front=l.getBlockState(node).getValue(GuidewayBlock.FACING);
         for(Direction d:new Direction[]{front,front.getClockWise(),front.getCounterClockWise(),front.getOpposite()})for(int dy:new int[]{0,1,-1}){
             BlockPos p=node.relative(d,3).above(dy);
@@ -684,7 +696,13 @@ public final class TransportVehicle extends PathfinderMob {
         if(!l.hasChunkAt(end)||!l.getBlockState(end).is(TransportContent.BAY)||!GuidewayBlock.complete(l,end)){
             status="Waiting for destination bay";return;
         }
-        double tx=end.getX()+.5,tz=end.getZ()+.5,landing=end.getY()+.26;
+        // Inbound loaded drones release their physical pallet from a safe
+        // hover above the deck. Landing inside the newly placed 2x2 pallet
+        // caused the empty drone to be trapped in the pallet's collisions.
+        // A returning (empty) drone still makes its original gentle landing.
+        double tx=end.getX()+.5,tz=end.getZ()+.5;
+        boolean loadedInput=!returning&&hasCargo()&&DroneBayRoutes.receiverReady(l,end);
+        double landing=end.getY()+(loadedInput?4.25:.26);
         // The heightmap only reads chunks that are already loaded by the
         // expiring flight corridor. Do not synchronously load distant terrain.
         int xx=(int)Math.floor(getX()),zz=(int)Math.floor(getZ());
@@ -763,7 +781,7 @@ public final class TransportVehicle extends PathfinderMob {
         }
         else{
             if(kind()==4&&!running){
-                if(awaitingBayUnload&&hasCargo()){player.sendSystemMessage(Component.literal("Clear a supported 2x2 pallet area beside the bay; the drone is waiting to unload."));return InteractionResult.SUCCESS;}
+                if(awaitingBayUnload&&hasCargo()){player.sendSystemMessage(Component.literal("Clear the 2x2 center of the INPUT bay; this drone is waiting to deposit its pallet."));return InteractionResult.SUCCESS;}
                 if(!hasCargo())serviceBay((ServerLevel)level(),true);
             }
             running=!running;if(!running)traveling=false;status=running?"Started":"Paused";

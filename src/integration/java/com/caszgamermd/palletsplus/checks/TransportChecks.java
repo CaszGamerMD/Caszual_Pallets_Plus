@@ -223,6 +223,30 @@ public final class TransportChecks implements ModInitializer {
         if(level.hasChunkAt(distantOutput))
             throw new AssertionError("Remote bay chunk unexpectedly loaded during test");
         TransitWorldData.get(level).station(distantOutput,"bay"); // previously discovered OUTPUT
+        // The real bay owns a four-block wrapped pallet, visible to the
+        // exact same StorageGroundPalletTransfer used by warehouse golems.
+        var incoming=new PalletCargo();
+        incoming.deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
+        incoming.items.set(0,new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND,41));
+        incoming.items.set(215,new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD,7));
+        if(!DroneBayCargo.deposit(level,receive,incoming)||!incoming.empty())
+            throw new AssertionError("Drone failed physical INPUT bay delivery or duplicated cargo");
+        BlockPos receivedRoot=DroneBayCargo.root(receive);
+        if(!receivedRoot.equals(DroneBayCargo.find(level,receive)))
+            throw new AssertionError("INPUT drone pallet is not physically on its center 2x2");
+        var pickup=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
+            .wrappedController(level,receivedRoot);
+        if(pickup==null||pickup.getItem(0).getCount()!=41||pickup.getItem(215).getCount()!=7)
+            throw new AssertionError("Warehouse golems cannot collect full pallet at INPUT bay");
+        var duplicate=new PalletCargo();
+        duplicate.deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
+        duplicate.items.set(0,new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLD_INGOT,5));
+        if(DroneBayCargo.deposit(level,receive,duplicate)||duplicate.empty())
+            throw new AssertionError("Occupied INPUT bay deleted or duplicated the second drone cargo");
         String remoteLink=DroneBayRoutes.link(level,distantOutput,receive);
         if(!remoteLink.startsWith("Air route linked"))
             throw new AssertionError("Unloaded source parking bay could not link: "+remoteLink);
@@ -230,6 +254,15 @@ public final class TransportChecks implements ModInitializer {
             throw new AssertionError("Remote bay route was not saved to the source record");
         if(!DroneBayRoutes.link(level,receive,send).startsWith("Selected source bay is INPUT"))
             throw new AssertionError("Reverse INPUT-to-OUTPUT routing was not rejected");
+        // Release the test delivery's real floor pallet so the previous
+        // flight/movement integration checks still see a clear input deck.
+        pickup.clearContent();
+        var previous=level.getBlockState(receivedRoot);
+        com.caszgamermd.caszualadditions.pallet.PalletCargoCollisionBlock.clear(level,receivedRoot,previous);
+        for(int part=1;part<4;part++)
+            level.removeBlock(com.caszgamermd.caszualadditions.pallet.PalletBlock.partPos(
+                receivedRoot,part,previous),false);
+        level.removeBlock(receivedRoot,false);
         drone=vehicle(level,4,12,9,9.5);
         drone.cargo[0].deck=new net.minecraft.world.item.ItemStack(Blocks.CHEST.asItem());
         drone.sync();
@@ -326,7 +359,7 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical pressure plate pallet handoff and occupied-pad protection");
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical pressure plate pallet handoff and occupied-pad protection, real drone INPUT pallet staging");
             engine=null;server.halt(false);
         }
     }
