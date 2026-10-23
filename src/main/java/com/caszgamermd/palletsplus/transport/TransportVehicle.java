@@ -738,6 +738,48 @@ public final class TransportVehicle extends PathfinderMob {
         }
         return true;
     }
+    /** A loaded drone drops cargo from ABOVE a Transfer Node. Decorative
+     * glass rails beside the 2x2 cargo deck must not make the entire 3.3-wide
+     * drone require a clear runway at ground level. Find the lowest safe
+     * hover height above the nearby side walls instead. */
+    private double cargoDropHoverY(ServerLevel level,BlockPos pad){
+        double x=pad.getX()+.5,z=pad.getZ()+.5;
+        double safe=pad.getY()+4.25;
+        AABB sweep=new AABB(x-1.7,pad.getY()+1,z-1.7,
+                            x+1.7,pad.getY()+12,z+1.7);
+        for(BlockPos pos:BlockPos.betweenClosed(
+                BlockPos.containing(sweep.minX,sweep.minY,sweep.minZ),
+                BlockPos.containing(sweep.maxX,sweep.maxY,sweep.maxZ))){
+            var state=level.getBlockState(pos);
+            if(state.is(TransportContent.BAY)&&pos.getY()==pad.getY())continue;
+            for(AABB box:state.getCollisionShape(level,pos).toAabbs()){
+                AABB placed=box.move(pos);
+                if(placed.intersects(sweep))
+                    safe=Math.max(safe,placed.maxY+.4);
+            }
+        }
+        return safe;
+    }
+    /** The 2x2 pallet must have a real vertical drop column, even if the
+     * wider drone must hover above side walls. Never deposit through a roof. */
+    private boolean clearCargoDrop(ServerLevel level,BlockPos pad,double hoverY){
+        AABB shaft=new AABB(pad.getX()-1,pad.getY()+3.01,pad.getZ()-1,
+                            pad.getX()+1,hoverY,pad.getZ()+1);
+        for(BlockPos pos:BlockPos.betweenClosed(
+                BlockPos.containing(shaft.minX,shaft.minY,shaft.minZ),
+                BlockPos.containing(shaft.maxX,shaft.maxY,shaft.maxZ))){
+            var state=level.getBlockState(pos);
+            for(AABB box:state.getCollisionShape(level,pos).toAabbs())
+                if(box.move(pos).intersects(shaft))return false;
+        }
+        return true;
+    }
+    private boolean droneInLandingArea(ServerLevel level,BlockPos pad){
+        for(TransportVehicle other:level.getEntitiesOfClass(TransportVehicle.class,
+                new AABB(pad).inflate(3,12,3)))
+            if(other!=this&&other.kind()==4)return true;
+        return false;
+    }
     private void fly(ServerLevel l){
         if(!linkedBay){status="Link a destination parking bay";running=false;return;}
         BlockPos end=returning?home:destination;
@@ -750,7 +792,10 @@ public final class TransportVehicle extends PathfinderMob {
         // A returning (empty) drone still makes its original gentle landing.
         double tx=end.getX()+.5,tz=end.getZ()+.5;
         boolean loadedInput=!returning&&hasCargo()&&DroneBayRoutes.receiverReady(l,end);
-        double landing=end.getY()+(loadedInput?4.25:.26);
+        // Loaded arrivals never physically park ON their own pallet. Side
+        // framing may block a 3.3-wide drone but not the real 2x2 pallet.
+        // Stay at a low, collision-safe hover just over that framing.
+        double landing=loadedInput?cargoDropHoverY(l,end):end.getY()+.26;
         // The heightmap only reads chunks that are already loaded by the
         // expiring flight corridor. Do not synchronously load distant terrain.
         int xx=(int)Math.floor(getX()),zz=(int)Math.floor(getZ());
@@ -781,11 +826,18 @@ public final class TransportVehicle extends PathfinderMob {
             status=horizontal==0?"Climbing over higher terrain":"Flying 20–40 blocks above terrain";
             return;
         }
-        if(!clearLanding(l,end)){
-            // Never collide with a second drone, a player-built structure or
-            // blocked landing pad. Hold above it until the landing is clear.
-            double hover=Math.max(landing+DroneFlightMath.MIN_CLEARANCE,getY());
-            step(l,new Vec3(tx,DroneFlightMath.towards(getY(),hover,.2),tz),TransportMotion.DRONE_SPEED+.2);
+        if(droneInLandingArea(l,end)){
+            status="Hovering — another drone is using the destination node";return;
+        }
+        if(loadedInput){
+            // Only the cargo column needs to be unobstructed; side glass is
+            // permitted and the actual swept drone collision is checked by
+            // step() as it descends. A solid roof must still prevent delivery.
+            if(!clearCargoDrop(l,end,landing)){
+                status="Hovering — clear roof above the 2x2 pallet footprint";return;
+            }
+        }else if(!clearLanding(l,end)){
+            // Empty drones retain the original full-width parking clearance.
             status="Hovering — parking bay obstructed";return;
         }
         double descend=DroneFlightMath.gentleLanding(getY(),landing);
