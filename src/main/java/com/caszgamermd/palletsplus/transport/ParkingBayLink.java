@@ -34,8 +34,8 @@ public final class ParkingBayLink extends Item {
             if(shouldToggleMode(stack,state)){
                 if(player.isSpectator())return InteractionResult.PASS;
                 if(world instanceof ServerLevel server)
-                    player.displayClientMessage(Component.literal(
-                        DroneBayRoutes.mode(server,GuidewayBlock.root(hit.getBlockPos(),state))),true);
+                    player.sendSystemMessage(Component.literal(
+                        DroneBayRoutes.mode(server,GuidewayBlock.root(hit.getBlockPos(),state))));
                 return InteractionResult.SUCCESS;
             }
             // Linking tools have a separate higher-priority path; holding
