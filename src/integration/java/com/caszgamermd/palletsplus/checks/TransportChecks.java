@@ -241,6 +241,22 @@ public final class TransportChecks implements ModInitializer {
             ||ParkingBayLink.shouldIntercept(net.minecraft.world.item.ItemStack.EMPTY,
                 level.getBlockState(receive)))
             throw new AssertionError("Parking Bay Link interaction priority is incorrect");
+        // Regression for the actual empty-hand event routing: all nine
+        // multi-block tiles must be recognized as node interactions.
+        // Using the link tool or another held item must not toggle a mode.
+        for(int part=0;part<9;part++){
+            BlockPos tile=GuidewayBlock.cell(receive,Direction.NORTH,part);
+            var nodePart=level.getBlockState(tile);
+            if(!ParkingBayLink.shouldToggleMode(net.minecraft.world.item.ItemStack.EMPTY,nodePart)
+                    ||ParkingBayLink.shouldToggleMode(linkingTool,nodePart)
+                    ||ParkingBayLink.shouldToggleMode(
+                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK),
+                        nodePart))
+                throw new AssertionError("Empty-hand Pallet Transfer Node event routing failed on tile "+part);
+        }
+        if(ParkingBayLink.shouldToggleMode(net.minecraft.world.item.ItemStack.EMPTY,
+                level.getBlockState(new BlockPos(18,64,18))))
+            throw new AssertionError("Empty-hand node click intercepted an unrelated block");
         BlockPos rackComputer=new BlockPos(18,64,12);
         level.setBlock(rackComputer,
             com.caszgamermd.caszualadditions.racks.RackContent.RACK_COMPUTER.defaultBlockState(),2);
