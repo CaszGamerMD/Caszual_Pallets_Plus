@@ -331,8 +331,24 @@ public final class TransportChecks implements ModInitializer {
             level.removeBlock(com.caszgamermd.caszualadditions.pallet.PalletBlock.partPos(
                 receivedRoot,part,previous),false);
         level.removeBlock(receivedRoot,false);
+        // A common player build has a glass 3x3 frame around the node,
+        // while its central 2x2 pallet footprint is clear. The drone is
+        // wider than the cargo and must unload from just ABOVE that frame.
+        // This used to fail clearLanding() and hover at cruise height forever.
+        for(int y=1;y<=4;y++){
+            for(int z=-1;z<=1;z++)
+                level.setBlock(receive.offset(1,y,z),Blocks.GLASS.defaultBlockState(),2);
+            for(int x=-1;x<=0;x++)
+                level.setBlock(receive.offset(x,y,1),Blocks.GLASS.defaultBlockState(),2);
+        }
         drone=vehicle(level,4,12,9,9.5);
-        drone.cargo[0].deck=new net.minecraft.world.item.ItemStack(Blocks.CHEST.asItem());
+        drone.cargo[0].deck=com.caszgamermd.caszualadditions.pallet.GlassPalletWrap.withWrap(
+            new net.minecraft.world.item.ItemStack(
+                com.caszgamermd.caszualadditions.pallet.PalletContent.WOODEN_PALLET_ITEM),true);
+        drone.cargo[0].items.set(0,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.DIAMOND,23));
+        drone.cargo[0].items.set(215,new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.EMERALD,11));
         drone.sync();
         drone.tickAutomatedBay(level,send,receive);
         if(!drone.flightActive())throw new AssertionError("Loaded automated drone did not depart from OUTPUT bay.");
@@ -452,7 +468,18 @@ public final class TransportChecks implements ModInitializer {
             if(record==null||record.get("active").getAsBoolean())
                 throw new AssertionError("Stopped indexing engine must release its chunk tickets");
             if(!conveyorSpeed||!holdStop||!indexed||!tNorthDone||!tWestDone||!cornerDone)throw new AssertionError("Missing check");
-            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, bump recovery and lossless emergency salvage, physical Parking Bay conveyor IN/OUT handoff and sustained redstone, real drone INPUT pallet staging, Pallet Transfer Node I/O role switching and two-Golem adjacent train handoffs");
+        }
+        if(moveTicks==440){
+            BlockPos destinationNode=new BlockPos(12,64,-9);
+            var delivered=com.caszgamermd.caszualadditions.racks.StorageGroundPalletTransfer
+                .wrappedController(server.overworld(),DroneBayCargo.root(destinationNode));
+            if(delivered==null||delivered.getItem(0).getCount()!=23
+                    ||delivered.getItem(215).getCount()!=11
+                    ||drone.hasCargo()||!drone.flightActive())
+                throw new AssertionError("Drone did not descend to framed INPUT node, deposit the whole 216-slot pallet and return: "
+                    +drone.transitStatus()+" xyz="+drone.position()+" delivered="+(delivered!=null)
+                    +" cargo="+drone.hasCargo());
+            LoggerFactory.getLogger("PalletsPlusChecks").info("PALLETS_PLUS_MOVEMENT_PASS: acceleration, ten cars, capacity limit, 8 m/s, hold bar, exact car indexing, downhill conveyor supports and overhead obstruction, corner-fed T merge, straight T merge, and diagonal corner-to-corner transfer, automated drone departure and terrain-clear takeoff, full 216-slot framed INPUT node hover unloading and return, bump recovery and lossless emergency salvage, physical Parking Bay conveyor IN/OUT handoff and sustained redstone, Pallet Transfer Node I/O role switching and two-Golem adjacent train handoffs");
             engine=null;server.halt(false);
         }
     }
