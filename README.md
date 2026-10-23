@@ -10,7 +10,7 @@ Caszual Additions continues to own pallets, cargo storage, racks, warehouse comp
 
 ## Installation and existing worlds
 
-Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.5.1.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
+Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.5.2.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
 
 Back up the world before changing mods. Finish active Golem train/conveyor loading jobs before replacing the old combined preview. Existing track, conveyor, vehicle, cargo and transit-data identifiers retain their `caszual_additions:` namespace intentionally, so the extracted addon can read those world objects. They are now registered by Pallets Plus. Pallets Plus has its own creative tab and contributes transport items to the shared Caszual content tag.
 
@@ -125,3 +125,8 @@ An empty, warehouse-linked OUTPUT Pallet Transfer Node with a matching adjacent 
 With an **empty selected hand**, right-click **any of the nine node tiles** to toggle its persistent mode. The bright **I** indicates INPUT and the yellow **O** indicates OUTPUT. The node confirms the new mode in chat. A real Pallet Transfer Link tool click continues to link nodes to warehouses/air routes without changing mode. The early Fabric right-click callback handles this before other interaction handlers can consume the click; the vanilla empty-hand handler remains a fallback. The mode and all nine visual marker block states remain synced to saved world data.
 
 A genuine adjacent conveyor carrier or stopped train flatbed is still required before any two-Golem transfer crew is requested; otherwise, no push job is dispatched. The drone animation and four-Golem warehouse pallet handling remain separate. Version 0.5.1 modifies only node interaction, tests, metadata and documentation, not transport movement or warehouse worker algorithms.
+
+
+## Drone pallet delivery above glass-framed nodes (0.5.2)
+
+A loaded drone arriving at an INPUT Pallet Transfer Node descends to a collision-safe low hover just above the frame, then deposits its entire real 216-slot pallet onto the node's 2x2 center. The drone flies back empty using the existing automatic return animation. Side glass outside the cargo footprint is not treated as a blocked pallet pad; a roof across the 2x2 cargo drop column, a second drone, or an actually occupied pallet deck still prevents unsafe unloading. Empty returning drones keep the original grounded parking clearance. Dedicated-server checks cover framed-node descent, full inventory transfer and return, not merely flight to the destination.
