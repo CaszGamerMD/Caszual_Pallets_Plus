@@ -10,7 +10,7 @@ Caszual Additions continues to own pallets, cargo storage, racks, warehouse comp
 
 ## Installation and existing worlds
 
-Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.4.0.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
+Install the regular Caszual Additions JAR alongside `caszual-pallets-plus-0.5.1.jar`. Do not install the old combined `pallet-transport` preview of Additions with this addon; it registers the same transport blocks and entities.
 
 Back up the world before changing mods. Finish active Golem train/conveyor loading jobs before replacing the old combined preview. Existing track, conveyor, vehicle, cargo and transit-data identifiers retain their `caszual_additions:` namespace intentionally, so the extracted addon can read those world objects. They are now registered by Pallets Plus. Pallets Plus has its own creative tab and contributes transport items to the shared Caszual content tag.
 
@@ -18,7 +18,7 @@ Removing Pallets Plus while keeping Additions preserves the warehouse implementa
 
 ## Development
 
-Work on `feature/long-distance-chunk-corridor`. Run `gradle build` with Java 25, Gradle 9.7.0 and Python 3. Models, recipes, translations and tags are generated deterministically by `scripts/generate_transport_models.py` into `build/generated/transport` during the build. Edit this generator for transport model changes.
+Work directly on `main`. Run `gradle build` with Java 25, Gradle 9.7.0 and Python 3. Models, recipes, translations and tags are generated deterministically by `scripts/generate_transport_models.py` into `build/generated/transport` during the build. Edit this generator for transport model changes.
 
 The pinned, unmodified Additions JAR in `libs` is a **compile/dev dependency only**, never bundled in the addon. Its source commit and checksum are recorded in `libs/README.md`. This lets both private repositories build without a broad cross-repository access token. Update the pinned dependency deliberately when warehouse APIs change. Runtime integration targets the existing MovingPallet fields/methods and fails loudly if an incompatible Additions build changes them.
 
@@ -118,3 +118,10 @@ An INPUT bay attached to a warehouse requests the new **four-Golem, no-replaceme
 ## Pallet Transfer Nodes (0.5.0): The former Drone Parking Bay is now named Pallet Transfer Node. Its block registry ID stays unchanged for existing worlds. Empty-hand right-click switches INPUT (glowing I) and OUTPUT (yellow O). The Pallet Transfer Link tool still assigns warehouses and pairs air routes. An OUTPUT node connected to a warehouse requests exactly two Golems to walk to and push an existing staged pallet onto a physically adjacent empty conveyor carrier or stopped train flatbed. INPUT nodes likewise use two Golems to remove a pallet from an adjacent loaded vehicle onto the node. No adjacent eligible train/conveyor means no pusher dispatch. Actual transfers move the original pallet and its 216 slots atomically without duplication. Drones keep their animations, four-Golem INPUT retrieval needs no replacement, and ordinary four-Golem Remote pickup keeps its replacement courier.
 
 An empty, warehouse-linked OUTPUT Pallet Transfer Node with a matching adjacent train/conveyor requests exactly two pushers to retrieve a real pallet from a reachable Output aisle rack. The node does not signal or request a crew without adjacent eligible transport. The loaded team reaches the node and transfers the original 216-slot pallet directly to the transport in one server transaction; no handplaced pallet on the node is required. The four-Golem INPUT and Remote pickup modes remain separate.
+
+
+## Pallet Transfer Node interaction fix (0.5.1)
+
+With an **empty selected hand**, right-click **any of the nine node tiles** to toggle its persistent mode. The bright **I** indicates INPUT and the yellow **O** indicates OUTPUT. The node displays confirmation in the action bar. A real Pallet Transfer Link tool click continues to link nodes to warehouses/air routes without changing mode. The early Fabric right-click callback handles this before other interaction handlers can consume the click; the vanilla empty-hand handler remains a fallback. The mode and all nine visual marker block states remain synced to saved world data.
+
+A genuine adjacent conveyor carrier or stopped train flatbed is still required before any two-Golem transfer crew is requested; otherwise, no push job is dispatched. The drone animation and four-Golem warehouse pallet handling remain separate. Version 0.5.1 modifies only node interaction, tests, metadata and documentation, not transport movement or warehouse worker algorithms.
