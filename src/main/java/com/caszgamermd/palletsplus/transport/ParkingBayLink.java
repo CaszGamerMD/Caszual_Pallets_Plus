@@ -26,10 +26,29 @@ public final class ParkingBayLink extends Item {
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player,world,hand,hit)->{
             ItemStack stack=player.getItemInHand(hand);
             var state=world.getBlockState(hit.getBlockPos());
+            // The normal 26.2 Block.useWithoutItem path can be skipped by
+            // other interaction handlers. Catch the empty-hand click BEFORE
+            // those handlers so the user can change an I/O node from any of
+            // its nine tiles. SUCCESS on the client sends the use packet;
+            // only the server changes SavedData and the 3D marker.
+            if(shouldToggleMode(stack,state)){
+                if(player.isSpectator())return InteractionResult.PASS;
+                if(world instanceof ServerLevel server)
+                    player.displayClientMessage(Component.literal(
+                        DroneBayRoutes.mode(server,GuidewayBlock.root(hit.getBlockPos(),state))),true);
+                return InteractionResult.SUCCESS;
+            }
+            // Linking tools have a separate higher-priority path; holding
+            // any item must never change node modes incidentally.
             if(!shouldIntercept(stack,state))return InteractionResult.PASS;
             if(!(stack.getItem() instanceof ParkingBayLink tool))return InteractionResult.PASS;
             return tool.useOn(new UseOnContext(player,hand,hit));
         });
+    }
+    /** Empty hand and one of the actual nine node tiles, regardless of
+     * which part was clicked or which hand is selected. */
+    public static boolean shouldToggleMode(ItemStack held,net.minecraft.world.level.block.state.BlockState target){
+        return held.isEmpty() && target.is(TransportContent.BAY);
     }
     public static boolean shouldIntercept(ItemStack held,net.minecraft.world.level.block.state.BlockState target){
         return held.getItem() instanceof ParkingBayLink &&
