@@ -336,8 +336,8 @@ public final class TransportChecks implements ModInitializer {
         // wider than the cargo and must unload from just ABOVE that frame.
         // This used to fail clearLanding() and hover at cruise height forever.
         for(int y=1;y<=4;y++){
-            for(int z=-1;z<=1;z++)
-                level.setBlock(receive.offset(1,y,z),Blocks.GLASS.defaultBlockState(),2);
+            for(int dz=-1;dz<=1;dz++)
+                level.setBlock(receive.offset(1,y,dz),Blocks.GLASS.defaultBlockState(),2);
             for(int x=-1;x<=0;x++)
                 level.setBlock(receive.offset(x,y,1),Blocks.GLASS.defaultBlockState(),2);
         }
