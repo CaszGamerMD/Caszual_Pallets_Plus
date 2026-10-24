@@ -5,4 +5,5 @@ import com.caszgamermd.palletsplus.transport.TransportVehicle;
 public interface TransportCrew {
     String palletsplus$requestTrain(TransportVehicle train);
     String palletsplus$requestConveyor(ServerLevel level,BlockPos root);
+    String palletsplus$requestNode(ServerLevel level,BlockPos root);
 }
