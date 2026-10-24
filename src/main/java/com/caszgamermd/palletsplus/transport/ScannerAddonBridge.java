@@ -28,6 +28,23 @@ public final class ScannerAddonBridge {
         return new BlockPos(tag.getIntOr("warehouse_x",0),
                 tag.getIntOr("warehouse_y",0),tag.getIntOr("warehouse_z",0));
     }
+    public static String onDrone(ServerLevel level,ServerPlayer player,
+            ItemStack scanner,TransportVehicle drone,String mode){
+        CompoundTag tag=data(scanner);
+        if("RECALL".equals(mode)){
+            String preference=tag.getStringOr("scanner_recall_target","HOME_BAY");
+            boolean release=tag.getBooleanOr("scanner_recall_release",false);
+            return drone.scannerRecall(level,player,preference,release);
+        }
+        if("LINK".equals(mode)){
+            if(drone.kind()!=4)return "Only drones accept Scanner air-route links.";
+            tag.putString("scanner_drone_uuid",drone.getUUID().toString());
+            tag.putString("scanner_drone_dimension",level.dimension().toString());
+            save(scanner,tag);
+            return "Drone selected. Click its destination Pallet Transfer Node.";
+        }
+        return "Select Scanner RECALL or LINK mode first.";
+    }
     public static String onBlock(ServerLevel level,ServerPlayer player,
             ItemStack scanner,BlockPos clicked,String mode){
         if(!level.hasChunkAt(clicked))return "The target is not loaded.";
@@ -39,6 +56,26 @@ public final class ScannerAddonBridge {
         if(!DroneBayRoutes.valid(level,node))return "Complete all nine node tiles first.";
         if("LINK".equals(mode)){
             CompoundTag tag=data(scanner);
+            if(tag.contains("scanner_drone_uuid")){
+                if(!level.dimension().toString().equals(
+                    tag.getStringOr("scanner_drone_dimension","")))
+                    return "Selected drone belongs to another dimension.";
+                try{
+                    var entity=level.getEntity(java.util.UUID.fromString(
+                        tag.getStringOr("scanner_drone_uuid","")));
+                    if(!(entity instanceof TransportVehicle drone)
+                            ||drone.kind()!=4)return "Selected drone is not loaded.";
+                    if(!drone.linkBay(node))
+                        return "Stop the drone and click a bay other than its home.";
+                    tag.remove("scanner_drone_uuid");
+                    tag.remove("scanner_drone_dimension");
+                    save(scanner,tag);
+                    return "Scanner linked the drone to Pallet Transfer Node "+
+                        node.toShortString()+".";
+                }catch(IllegalArgumentException ex){
+                    return "Invalid stored drone selection.";
+                }
+            }
             String operation=tag.getStringOr("scanner_link_type","AIR_ROUTE");
             if("WAREHOUSE".equals(operation)){
                 BlockPos computer=warehouse(scanner,level);
