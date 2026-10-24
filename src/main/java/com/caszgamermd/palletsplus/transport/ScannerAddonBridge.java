@@ -80,8 +80,20 @@ public final class ScannerAddonBridge {
             if(carrier==null)return "No compatible adjacent conveyor or stopped train flatbed.";
             // The warehouse's existing two-Golem dispatcher handles a genuine
             // pallet, preventing ghost cargo or a one-worker partial mission.
-            return PalletNodePushCrew.request(level,player.getUUID(),
+            // The pinned compile-only Additions JAR predates this optional
+            // dispatcher. Resolve it at runtime against the installed
+            // 0.1.4+ warehouse, rather than bundling a second copy.
+            try{
+                var bridge=Class.forName(
+                    "com.caszgamermd.caszualadditions.racks.PalletNodePushCrew");
+                var request=bridge.getMethod("request",ServerLevel.class,
+                    java.util.UUID.class,BlockPos.class,BlockPos.class,
+                    java.util.UUID.class,boolean.class);
+                return (String)request.invoke(null,level,player.getUUID(),
                     computer,node,carrier.getUUID(),loading);
+            }catch(ReflectiveOperationException ex){
+                return "Compatible Caszual Additions two-Golem dispatcher required.";
+            }
         }
         return "Switch Scanner to LINK or LOAD / UNLOAD.";
     }
