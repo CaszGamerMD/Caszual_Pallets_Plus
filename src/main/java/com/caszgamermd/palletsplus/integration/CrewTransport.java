@@ -68,7 +68,7 @@ public final class CrewTransport {
                                         +"then click this empty Pallet Transfer Node."));
                             }
                         }
-                    }else if(mode==StorageScannerItem.Mode.FORKLIFT){
+                    }else if("FORKLIFT".equals(mode.name())){
                         BlockPos clicked=found!=null?found:DroneBayCargo.root(center).below();
                         var destinationHit=new net.minecraft.world.phys.BlockHitResult(
                                 net.minecraft.world.phys.Vec3.atCenterOf(clicked),
