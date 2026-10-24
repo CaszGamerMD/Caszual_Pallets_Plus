@@ -26,6 +26,10 @@ public final class TransportVehicle extends PathfinderMob {
     private Direction heading=Direction.NORTH;
     private boolean running,traveling,linkedBay,returning,dropsReleased,awaitingBayUnload,automatedBayRoute;
     private int flightStage,latchedRoute=-1;
+    private String scannerRecallMode="";
+    private UUID scannerRecallOwner;
+    private boolean scannerRecallRelease;
+    private BlockPos scannerRecallGround=BlockPos.ZERO;
     private static final BlockPos NO_STATION=new BlockPos(0,Integer.MIN_VALUE,0);
     private BlockPos stationPassed=NO_STATION;
     private int lastMoveTick=-100;
@@ -170,6 +174,53 @@ public final class TransportVehicle extends PathfinderMob {
         if(!hasCargo())serviceBay(level,true);
         if(hasCargo()){running=true;traveling=true;flightStage=0;status="Automatic delivery to INPUT bay";}
     }
+    /** Emergency drone orders from the Warehouse Scanner. All callbacks
+     * execute server-side and the current pallet stays owned by this drone
+     * until an actual physical drop succeeds. */
+    public String scannerRecall(ServerLevel level,net.minecraft.server.level.ServerPlayer owner,
+            String preference,boolean releasePallet){
+        if(kind()!=4)return "Recall requires a drone.";
+        if(owner.distanceToSqr(this)>40*40)return "Drone recall reach is 40 blocks.";
+        if(!java.util.List.of("GROUND","NEAREST_BAY","HOME_BAY","FOLLOW").contains(preference))
+            return "Invalid drone recall destination.";
+        BlockPos chosen=null;
+        if("HOME_BAY".equals(preference))chosen=home;
+        if("NEAREST_BAY".equals(preference)){
+            double distance=Double.POSITIVE_INFINITY;
+            for(var record:TransitWorldData.get(level).stations.values()){
+                if(!record.has("kind")||!"bay".equals(record.get("kind").getAsString()))continue;
+                BlockPos at;
+                try{at=new BlockPos(record.get("x").getAsInt(),
+                        record.get("y").getAsInt(),record.get("z").getAsInt());}
+                catch(RuntimeException ignored){continue;}
+                if(!DroneBayRoutes.valid(level,at))continue;
+                double d=at.distToCenterSqr(position());
+                if(d<distance){distance=d;chosen=at;}
+            }
+        }
+        if(("HOME_BAY".equals(preference)||"NEAREST_BAY".equals(preference))
+                &&(chosen==null||!DroneBayRoutes.valid(level,chosen)))
+            return "No loaded and intact destination bay for this recall.";
+        if("GROUND".equals(preference)){
+            int x=(int)Math.floor(getX()),z=(int)Math.floor(getZ());
+            if(!level.hasChunkAt(new BlockPos(x,0,z)))
+                return "Cannot find ground in an unloaded chunk.";
+            int ground=level.getHeight(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
+            scannerRecallGround=new BlockPos(x-1,ground,z-1);
+        }
+        scannerRecallMode=preference;
+        scannerRecallOwner=owner.getUUID();
+        scannerRecallRelease=releasePallet;
+        if(chosen!=null){destination=chosen;returning=false;}
+        automatedBayRoute=false;
+        awaitingBayUnload=false;
+        linkedBay=true;
+        running=true;traveling=true;flightStage=1;
+        status="SCANNER RECALL: "+preference+(releasePallet?" / safe cargo release":" / cargo retained");
+        sync();
+        return status;
+    }
     public boolean flightActive(){return kind()==4&&linkedBay&&(running||traveling||awaitingBayUnload);}
     /** Parked cars never consume tickets. The engine tickets behind itself for the consist. */
     public boolean transportChunksActive(){return kind()==4?flightActive():(kind()==0||kind()==1)&&running;}
@@ -183,7 +234,14 @@ public final class TransportVehicle extends PathfinderMob {
         for(int i=1;i<cars.size();i++)positions.add(cars.get(i).position());
         return positions;
     }
-    public BlockPos flightDestination(){return awaitingBayUnload?node:returning?home:destination;}
+    public BlockPos flightDestination(){
+        if("GROUND".equals(scannerRecallMode))return scannerRecallGround;
+        if("FOLLOW".equals(scannerRecallMode)&&scannerRecallOwner!=null&&level() instanceof ServerLevel level){
+            var owner=level.getServer().getPlayerList().getPlayer(scannerRecallOwner);
+            if(owner!=null&&owner.level()==level)return owner.blockPosition();
+        }
+        return awaitingBayUnload?node:returning?home:destination;
+    }
     public String transitStatus(){return status;}
     public void releaseStation(){if(kind()==1&&!running&&status.startsWith("Station")){running=true;status="Departing station";}}
     @Override public void remove(Entity.RemovalReason reason){if(reason.shouldDestroy()&&level() instanceof ServerLevel l)TransitWorldData.get(l).forget(getStringUUID());super.remove(reason);}
@@ -781,6 +839,46 @@ public final class TransportVehicle extends PathfinderMob {
         return false;
     }
     private void fly(ServerLevel l){
+        if("FOLLOW".equals(scannerRecallMode)){
+            var owner=scannerRecallOwner==null?null:
+                l.getServer().getPlayerList().getPlayer(scannerRecallOwner);
+            if(owner==null||owner.level()!=l){
+                running=false;traveling=false;
+                status="FOLLOW recall paused: owner not in this dimension";return;
+            }
+            Vec3 goal=new Vec3(owner.getX(),owner.getY()+8,owner.getZ());
+            Vec3 delta=goal.subtract(position());
+            if(delta.length()>1.0){
+                Vec3 next=position().add(delta.scale(Math.min(.42,delta.length())/delta.length()));
+                if(!step(l,next,.44)){status="FOLLOW recall avoiding obstruction";return;}
+            }
+            status="SCANNER RECALL: following player with cargo retained";
+            return;
+        }
+        if("GROUND".equals(scannerRecallMode)){
+            BlockPos spot=scannerRecallGround;
+            if(!l.hasChunkAt(spot)){status="GROUND recall waiting for chunk";return;}
+            // Ground is a real four-cell destination. Never void the pallet if
+            // another block has occupied it while the drone was descending.
+            double tx=spot.getX()+1,tz=spot.getZ()+1;
+            double stop=spot.getY()+(hasCargo()?4.25:.26);
+            double nextY=DroneFlightMath.gentleLanding(getY(),stop);
+            if(!step(l,new Vec3(tx,nextY,tz),TransportMotion.DRONE_SPEED+.15)){
+                status="GROUND recall waiting for clear approach";return;
+            }
+            if(position().distanceToSqr(tx,stop,tz)<.04){
+                if(scannerRecallRelease&&hasCargo()){
+                    if(!cargo[0].place(l,spot,net.minecraft.core.Direction.EAST)){
+                        status="GROUND recall: no clear supported 2x2 for pallet";return;
+                    }
+                    sync();
+                }
+                scannerRecallMode="";
+                running=false;traveling=false;flightStage=0;
+                status="GROUND recall: settled safely"+(hasCargo()?" with cargo":"; pallet released");
+            }
+            return;
+        }
         if(!linkedBay){status="Link a destination parking bay";running=false;return;}
         BlockPos end=returning?home:destination;
         if(!l.hasChunkAt(end)||!l.getBlockState(end).is(TransportContent.BAY)||!GuidewayBlock.complete(l,end)){
@@ -791,7 +889,8 @@ public final class TransportVehicle extends PathfinderMob {
         // caused the empty drone to be trapped in the pallet's collisions.
         // A returning (empty) drone still makes its original gentle landing.
         double tx=end.getX()+.5,tz=end.getZ()+.5;
-        boolean loadedInput=!returning&&hasCargo()&&DroneBayRoutes.receiverReady(l,end);
+        boolean loadedInput=!returning&&hasCargo()&&
+                (DroneBayRoutes.receiverReady(l,end)||!scannerRecallMode.isEmpty());
         // Loaded arrivals never physically park ON their own pallet. Side
         // framing may block a 3.3-wide drone but not the real 2x2 pallet.
         // Stay at a low, collision-safe hover just over that framing.
@@ -846,12 +945,31 @@ public final class TransportVehicle extends PathfinderMob {
         }
         if(position().distanceToSqr(tx,landing,tz)<.02){
             setPos(tx,landing,tz);node=end;flightStage=0;traveling=false;running=false;
-            if(returning){returning=false;status="Returned to OUTPUT bay — awaiting next pallet";}
+            if(!scannerRecallMode.isEmpty()){
+                awaitingBayUnload=scannerRecallRelease&&hasCargo();
+                status=awaitingBayUnload?"Scanner recall: safely unloading pallet":
+                        "Scanner recall: landed, retaining cargo";
+                scannerRecallMode="";
+                returning=false;
+            }else if(returning){returning=false;status="Returned to OUTPUT bay — awaiting next pallet";}
             else{awaitingBayUnload=hasCargo();status=hasCargo()?"Landed — unloading at INPUT bay":"Landed at destination bay";}
         }else status="Soft landing";
     }
     @Override protected InteractionResult mobInteract(Player player,InteractionHand hand){
         if(level().isClientSide())return InteractionResult.SUCCESS;
+        if(player.getItemInHand(hand).is(com.caszgamermd.caszualadditions.racks.RackContent.STORAGE_SCANNER_ITEM)
+                &&player instanceof net.minecraft.server.level.ServerPlayer sp){
+            String scannerMode=player.getItemInHand(hand)
+                .getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.EMPTY)
+                .copyTag().getStringOr("scanner_mode","REMOTE");
+            if(scannerMode.equals("RECALL")||scannerMode.equals("LINK")){
+                String result=ScannerAddonBridge.onDrone((ServerLevel)level(),sp,
+                    player.getItemInHand(hand),this,scannerMode);
+                sp.sendSystemMessage(Component.literal(result));
+                return InteractionResult.SUCCESS;
+            }
+        }
         if(player.getItemInHand(hand).is(com.caszgamermd.caszualadditions.racks.RackContent.STORAGE_SCANNER_ITEM)&&player instanceof net.minecraft.server.level.ServerPlayer sp){
             String problem=com.caszgamermd.palletsplus.integration.CrewTransport.scannerProblem(player.getItemInHand(hand),(ServerLevel)level());
             if(!problem.isEmpty()){sp.sendSystemMessage(Component.literal(problem));return InteractionResult.SUCCESS;}
@@ -901,6 +1019,10 @@ public final class TransportVehicle extends PathfinderMob {
     }
     @Override protected void addAdditionalSaveData(ValueOutput out){
         super.addAdditionalSaveData(out);out.putDouble("train_speed",trainSpeed);out.putDouble("index_remaining",indexRemaining);out.store("index_rail",BlockPos.CODEC,indexRail);out.putInt("indexed_car",indexedCar);out.putString("transit_status",status);out.putInt("logic_route",latchedRoute);out.store("corner_join",BlockPos.CODEC,cornerJoin);out.store("corner_from",Vec3.CODEC,cornerFrom);out.store("corner_to",Vec3.CODEC,cornerTo);out.putDouble("corner_distance",cornerDistance);out.putString("guide_heading",heading.getName());out.store("station_passed",BlockPos.CODEC,stationPassed);out.putInt("kind",kind());out.putDouble("progress",progress);out.store("node",BlockPos.CODEC,node);out.store("target",BlockPos.CODEC,target);out.store("previous_node",BlockPos.CODEC,previousNode);out.store("home",BlockPos.CODEC,home);out.store("destination",BlockPos.CODEC,destination);
+        out.putString("scanner_recall_mode",scannerRecallMode);
+        if(scannerRecallOwner!=null)out.putString("scanner_recall_owner",scannerRecallOwner.toString());
+        out.putBoolean("scanner_recall_release",scannerRecallRelease);
+        out.store("scanner_recall_ground",BlockPos.CODEC,scannerRecallGround);
         out.putBoolean("automated_bay_route",automatedBayRoute);out.putBoolean("awaiting_bay_unload",awaitingBayUnload);out.putBoolean("running",running);out.putBoolean("traveling",traveling);out.putBoolean("linked_bay",linkedBay);out.putBoolean("returning",returning);out.putInt("flight_stage",flightStage);out.putString("ahead",ahead);out.putString("behind",behind);out.putBoolean("drops_released",dropsReleased);
         out.store("trail",Vec3.CODEC.listOf(),List.copyOf(trail));for(int i=0;i<3;i++)cargo[i].save(out,i);
     }
@@ -910,6 +1032,11 @@ public final class TransportVehicle extends PathfinderMob {
         heading=current.hasProperty(GuidewayBlock.FACING)?current.getValue(GuidewayBlock.FACING):Direction.NORTH;
         String savedHeading=in.getStringOr("guide_heading",heading.getName());
         for(Direction d:Direction.Plane.HORIZONTAL)if(d.getName().equals(savedHeading)){heading=d;break;}
+        scannerRecallMode=in.getStringOr("scanner_recall_mode","");
+        try{scannerRecallOwner=UUID.fromString(in.getStringOr("scanner_recall_owner",""));}
+        catch(IllegalArgumentException ignored){scannerRecallOwner=null;}
+        scannerRecallRelease=in.getBooleanOr("scanner_recall_release",false);
+        scannerRecallGround=in.read("scanner_recall_ground",BlockPos.CODEC).orElse(BlockPos.ZERO);
         automatedBayRoute=in.getBooleanOr("automated_bay_route",false);awaitingBayUnload=in.getBooleanOr("awaiting_bay_unload",false);running=in.getBooleanOr("running",false);traveling=in.getBooleanOr("traveling",false);linkedBay=in.getBooleanOr("linked_bay",false);returning=in.getBooleanOr("returning",false);flightStage=Math.clamp(in.getIntOr("flight_stage",0),0,2);ahead=in.getStringOr("ahead","");behind=in.getStringOr("behind","");dropsReleased=in.getBooleanOr("drops_released",false);
         trail.clear();var saved=in.read("trail",Vec3.CODEC.listOf()).orElse(List.of());trail.addAll(saved.subList(Math.max(0,saved.size()-400),saved.size()));for(int i=0;i<3;i++)cargo[i].load(in,i);sync();setNoGravity(true);
     }
