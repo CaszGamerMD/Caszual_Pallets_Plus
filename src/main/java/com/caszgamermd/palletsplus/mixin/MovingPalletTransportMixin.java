@@ -127,7 +127,10 @@ public abstract class MovingPalletTransportMixin extends PathfinderMob implement
         // using ground-delivery AI would seek a nonexistent raised aisle.
         BlockPos approach=null;
         double best=Double.POSITIVE_INFINITY;
+        int chosenSide=0;
         for(Direction side:Direction.Plane.HORIZONTAL){
+            if(palletsplus$approachSide>0
+                    &&palletsplus$approachSide!=side.ordinal()+1)continue;
             for(int distance=3;distance<=5;distance++){
                 BlockPos trial=center.relative(side,distance);
                 if(!StorageGolemReturnPath.walkable(level,trial))continue;
@@ -135,13 +138,14 @@ public abstract class MovingPalletTransportMixin extends PathfinderMob implement
                 if(!level.noCollision(this,getBoundingBox()
                         .move(x-getX(),trial.getY()-getY(),z-getZ())))continue;
                 double d=distanceToSqr(x,trial.getY(),z);
-                if(d<best){best=d;approach=trial;}
+                if(d<best){best=d;approach=trial;chosenSide=side.ordinal()+1;}
             }
         }
         if(approach==null){
             waitForDelivery("WAITING: NEED CLEAR GROUND AISLE BESIDE TRANSFER NODE");
             return;
         }
+        if(palletsplus$approachSide==0)palletsplus$approachSide=chosenSide;
         double x=approach.getX()+.5,z=approach.getZ()+.5;
         if(Math.hypot(x-getX(),z-getZ())>.55
                 ||Math.abs(getY()-approach.getY())>.65){
