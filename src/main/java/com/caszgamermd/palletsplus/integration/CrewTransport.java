@@ -35,28 +35,51 @@ public final class CrewTransport {
             var state=level.getBlockState(hit.getBlockPos());
             if(!(state.getBlock() instanceof GuidewayBlock way)||way.rail())return InteractionResult.PASS;
             if(way.bay()){
-                // The actual normal ground pallet sits one block ABOVE the
-                // 3x3 parking pad. Scanner users often click the pad itself:
-                // forward that click to the real pallet root for DIRECT
-                // Golem retrieval and FORKLIFT source selection. When
-                // empty, FORKLIFT/Direct target the bay's central 2x2
-                // placement footprint, not an adjacent random block.
+                // A 3x3 node is a TRANSPORT DESTINATION, not an ordinary
+                // ground tile. Routing the empty pad through scanner.useOn
+                // made the pallet adopt the player's facing (often outside
+                // the node's central 2x2) and required an impossible raised
+                // service aisle. Route loaded crews through a dedicated
+                // node handoff; an empty crew may still retrieve a wrapped
+                // pallet already sitting on the same physical node.
                 if(level instanceof ServerLevel server && player instanceof ServerPlayer sp){
                     BlockPos center=GuidewayBlock.root(hit.getBlockPos(),state);
+                    var mode=StorageScannerItem.mode(player.getItemInHand(hand));
                     BlockPos found=DroneBayCargo.find(server,center);
-                    BlockPos clicked=found!=null?found:DroneBayCargo.root(center).below();
-                    if(StorageScannerItem.mode(player.getItemInHand(hand))==
-                            StorageScannerItem.Mode.REMOTE){
-                        sp.sendSystemMessage(Component.literal(
-                            "INPUT Parking Bay uses automatic THREE-Golem pickup without an empty replacement. Use DIRECT or FORKLIFT mode for manual transfer."));
-                    }else{
+                    if(mode==StorageScannerItem.Mode.DIRECT){
+                        String problem=scannerProblem(player.getItemInHand(hand),server);
+                        if(!problem.isEmpty()){
+                            sp.sendSystemMessage(Component.literal(problem));
+                        }else{
+                            var rig=moving(server,sp);
+                            if(rig!=null){
+                                sp.sendSystemMessage(Component.literal(
+                                        ((TransportCrew)(Object)rig).palletsplus$requestNode(server,center)));
+                            }else if(found!=null){
+                                var destinationHit=new net.minecraft.world.phys.BlockHitResult(
+                                        net.minecraft.world.phys.Vec3.atCenterOf(found),
+                                        net.minecraft.core.Direction.UP,found,false);
+                                player.getItemInHand(hand).getItem().useOn(
+                                        new net.minecraft.world.item.context.UseOnContext(
+                                                player,hand,destinationHit));
+                            }else{
+                                sp.sendSystemMessage(Component.literal(
+                                        "DIRECT: load a wrapped pallet with four Golems first, "
+                                        +"then click this empty Pallet Transfer Node."));
+                            }
+                        }
+                    }else if(mode==StorageScannerItem.Mode.FORKLIFT){
+                        BlockPos clicked=found!=null?found:DroneBayCargo.root(center).below();
                         var destinationHit=new net.minecraft.world.phys.BlockHitResult(
-                            new net.minecraft.world.phys.Vec3(clicked.getX()+.5,
-                                clicked.getY()+.5,clicked.getZ()+.5),
-                            net.minecraft.core.Direction.UP,clicked,false);
-                        var context=new net.minecraft.world.item.context.UseOnContext(
-                            player,hand,destinationHit);
-                        player.getItemInHand(hand).getItem().useOn(context);
+                                net.minecraft.world.phys.Vec3.atCenterOf(clicked),
+                                net.minecraft.core.Direction.UP,clicked,false);
+                        player.getItemInHand(hand).getItem().useOn(
+                                new net.minecraft.world.item.context.UseOnContext(
+                                        player,hand,destinationHit));
+                    }else{
+                        sp.sendSystemMessage(Component.literal(
+                                "Use DIRECT or FORKLIFT Scanner mode for manual "
+                                +"Pallet Transfer Node deliveries."));
                     }
                 }
                 return InteractionResult.SUCCESS;
