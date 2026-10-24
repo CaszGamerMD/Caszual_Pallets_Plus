@@ -60,3 +60,36 @@ An empty drone collects a **wrapped ground pallet** when you click it to depart 
 Left/right rails use continuous quarter-pixel curve edges, solid angled sleepers and a gauge matched to the straight rail ends. The square backing has been removed from rail corners. Conveyor corners use a curved rubber transfer belt with steel edges, yellow safety trim and end rollers. Texture coordinates continue across curved strips instead of repeating an entire texture on every sliver. Existing corner blocks update automatically; routes and pallet movement are unchanged.
 
 See the [0.2.0 controls and speeds](../README.md#speeds-seats-and-unloading-020) for seats, indexing rails and the conveyor crank.
+
+
+### Storage Golem handoff to conveyor and Pallet Transfer Node
+
+With your **Warehouse Scanner in DIRECT mode**, summon four golems from
+Caszual Additions, pick up a wrapped pallet, and click a transport destination
+with the Scanner.
+
+- **Conveyor:** Click any part of a complete nine-block conveyor module.
+  The loaded four-Golem rig approaches a supported aisle beside the module,
+  aligns the pallet, and loads it into an actual conveyor carrier. Keep the
+  loading side clear, with enough room for the 3-block-wide crew. The selected
+  approach side is held steady instead of switching as the rig moves.
+- **Pallet Transfer Node:** Click any of the nine parts of a complete node
+  (INPUT or OUTPUT). The crew approaches from **ground level outside** the
+  node, then puts the wrapped, real 2×2 pallet into the **center of the node,
+  one block above its deck**. The fixed pallet facing is EAST so it occupies
+  all four intended cells regardless of which direction the player faces.
+  The physical pallet and its original 216 slots are stored in the world,
+  not in a hidden node inventory. OUTPUT nodes can then send that staged
+  pallet via their connected Pallets Plus transportation as usual.
+
+If the conveyor is full or occupied, the node has a pallet, the unloading
+aisle is blocked, or an unloading block is occupied, the rig waits with
+the pallet and **all its contents**. It never produces an extra pallet,
+replaces an existing load, or deletes saved inventory. Clicking an
+occupied node with an empty Direct crew still allows picking up its
+wrapped pallet; clicking an empty node while no rig is loaded provides a
+clear instruction instead of trying to place air.
+
+This change lives in **Pallets Plus**. It uses Caszual Additions' existing
+`MovingPallet` cargo owner and Warehouse Scanner; installing the matching
+Caszual Additions JAR remains required.
